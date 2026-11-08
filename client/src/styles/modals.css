@@ -1,0 +1,1930 @@
+/* ==========================================================================
+   Carnage Party — модальные окна
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Общие размеры
+   -------------------------------------------------------------------------- */
+
+.create-server-modal { width: 500px; }
+.join-server-modal { width: 470px; }
+.invite-modal { width: 540px; }
+.new-dm-modal { width: 540px; }
+.dm-settings-modal { width: 500px; }
+.channel-settings-modal { width: 560px; }
+.confirm-modal { width: 430px; }
+.ban-modal { width: 480px; }
+.roles-modal { width: 500px; }
+.pins-modal { width: 620px; }
+.search-modal { width: 680px; }
+.settings-modal { width: 940px; height: min(780px, 88vh); }
+.server-settings-modal { width: 1000px; height: min(790px, 88vh); }
+.profile-modal { width: 480px; }
+
+.create-server-modal,
+.join-server-modal,
+.invite-modal,
+.new-dm-modal,
+.dm-settings-modal,
+.channel-settings-modal,
+.ban-modal,
+.roles-modal {
+  padding: 26px;
+}
+
+.create-server-modal .modal-header,
+.join-server-modal .modal-header,
+.invite-modal .modal-header,
+.new-dm-modal .modal-header,
+.dm-settings-modal .modal-header,
+.channel-settings-modal .modal-header,
+.ban-modal .modal-header,
+.roles-modal .modal-header {
+  padding: 0 24px 0 0;
+}
+
+.create-server-modal h2,
+.join-server-modal h2,
+.invite-modal h2,
+.new-dm-modal h2,
+.dm-settings-modal h2,
+.channel-settings-modal h2,
+.ban-modal h2,
+.roles-modal h2 {
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.create-server-modal .modal-actions,
+.join-server-modal .modal-actions,
+.invite-modal .modal-actions,
+.new-dm-modal .modal-actions,
+.dm-settings-modal .modal-actions,
+.channel-settings-modal .modal-actions,
+.ban-modal .modal-actions,
+.roles-modal .modal-actions {
+  margin-top: 20px;
+}
+
+/* --------------------------------------------------------------------------
+   Подтверждение
+   -------------------------------------------------------------------------- */
+
+.confirm-modal {
+  padding: 30px 28px 24px;
+  align-items: center;
+  text-align: center;
+}
+
+.confirm-icon {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+
+.confirm-modal h2 {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.confirm-modal > p {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  max-width: 350px;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 9px;
+  margin-top: 22px;
+  width: 100%;
+}
+
+.confirm-actions .btn {
+  flex: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Создание сервера / вход по коду / приглашение
+   -------------------------------------------------------------------------- */
+
+.server-icon-editor {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+
+.server-icon-editor .avatar {
+  border: 2px solid var(--border-strong);
+}
+
+.server-icon-editor > div:not(.avatar) {
+  flex: 1;
+  min-width: 0;
+}
+
+.server-icon-editor > div > span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.create-server-perks {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 14px;
+  border-radius: 9px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+
+.create-server-perks > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.create-server-perks svg {
+  color: var(--accent);
+  flex: none;
+}
+
+.input-with-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-icon > svg {
+  position: absolute;
+  left: 13px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.input-with-icon input {
+  width: 100%;
+  padding-left: 39px;
+  height: 44px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+}
+
+.invite-server {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.invite-code-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--bg-1);
+  border: 1px dashed var(--border-strong);
+}
+
+.invite-code {
+  flex: 1;
+  font-family: Consolas, monospace;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+}
+
+.invite-regenerate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.invite-regenerate > span {
+  font-size: 11.5px;
+  color: var(--muted);
+  max-width: 300px;
+}
+
+.invite-copy-text {
+  align-self: flex-start;
+}
+
+/* --------------------------------------------------------------------------
+   Новый диалог
+   -------------------------------------------------------------------------- */
+
+.dm-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.dm-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.dm-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+}
+
+.dm-search input:focus {
+  box-shadow: none;
+}
+
+.selected-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 0;
+}
+
+.selected-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 99px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(217, 70, 239, 0.28);
+  color: #f2b8ff;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.selected-chip:hover {
+  background: var(--accent-soft-2);
+}
+
+.dm-friend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+
+.dm-friend-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 7px;
+  text-align: left;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.dm-friend-row:hover {
+  background: var(--hover);
+}
+
+.dm-friend-row.active {
+  background: var(--accent-soft);
+}
+
+.dm-friend-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-friend-row .dm-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex: none;
+}
+
+.dm-check.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* --------------------------------------------------------------------------
+   Настройки канала
+   -------------------------------------------------------------------------- */
+
+.channel-type-select {
+  display: flex;
+  gap: 10px;
+}
+
+.channel-type-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 14px;
+  border-radius: 9px;
+  background: var(--bg-3);
+  border: 2px solid var(--border);
+  color: var(--muted);
+  text-align: left;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.channel-type-card strong {
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.channel-type-card span {
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.channel-type-card svg {
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.channel-type-card:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-4);
+}
+
+.channel-type-card.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.channel-type-card.active svg,
+.channel-type-card.active strong {
+  color: var(--accent);
+}
+
+/* --------------------------------------------------------------------------
+   Настройки диалога
+   -------------------------------------------------------------------------- */
+
+.dm-about {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin-top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dm-about-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.dm-about-head > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.dm-about-head strong {
+  display: block;
+  font-size: 15px;
+}
+
+.dm-about-head span {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.dm-about-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.group-members {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 5px;
+  border-radius: 9px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+
+.group-member {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+
+.group-member:hover {
+  background: var(--hover);
+}
+
+.group-member > span:nth-child(2) {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Настройки приложения
+   -------------------------------------------------------------------------- */
+
+.settings-layout {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.settings-nav {
+  width: 228px;
+  flex: none;
+  background: var(--bg-2);
+  padding: 20px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.settings-nav-title {
+  padding: 0 10px 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-2);
+}
+
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.settings-nav-item:hover {
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.settings-nav-item.active {
+  background: var(--hover-strong);
+  color: var(--text);
+}
+
+.settings-nav-item.danger {
+  color: #ff8f91;
+}
+
+.settings-nav-item.danger:hover {
+  background: var(--red-soft);
+}
+
+.settings-nav-sep {
+  height: 1px;
+  background: var(--border-strong);
+  margin: 9px 8px;
+}
+
+.settings-version {
+  margin-top: auto;
+  padding: 16px 10px 4px;
+  font-size: 10.5px;
+  color: var(--muted-2);
+}
+
+.settings-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px 34px 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.settings-head h2 {
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.settings-head p {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.settings-profile-preview {
+  border-radius: 11px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+  flex: none;
+}
+
+.settings-banner {
+  height: 88px;
+  background: var(--gradient);
+  position: relative;
+}
+
+.settings-preview-body {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 12px 16px;
+}
+
+.settings-preview-avatar {
+  flex: none;
+  margin-top: -42px;
+  border: 4px solid var(--bg-3);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.35);
+}
+
+.settings-preview-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.settings-preview-body strong {
+  font-size: 15px;
+}
+
+.settings-preview-body span {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.settings-content .form-field input,
+.settings-content .form-field textarea {
+  background: var(--bg-1);
+}
+
+.settings-content .form-field textarea {
+  min-height: 92px;
+}
+
+.settings-content .form-field select {
+  background: var(--bg-1);
+  height: 42px;
+}
+
+.password-form {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.mic-test {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.mic-meter {
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.mic-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--green), var(--yellow), var(--red));
+  transition: width 0.08s linear;
+}
+
+.ptt-settings {
+  margin-top: 4px;
+}
+
+.ptt-key-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-1);
+}
+
+.ptt-key-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.ptt-key-info small {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.ptt-key-btn {
+  min-width: 132px;
+  justify-content: center;
+}
+
+/* --------------------------------------------------------------------------
+   Настройки сервера
+   -------------------------------------------------------------------------- */
+
+.server-settings-layout {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.server-settings-side {
+  width: 238px;
+  flex: none;
+  background: var(--bg-2);
+  padding: 16px 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.server-settings-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 15px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 9px;
+}
+
+.server-settings-brand > div {
+  min-width: 0;
+}
+
+.server-settings-brand strong {
+  display: block;
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-settings-brand span {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.server-settings-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px 34px 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.server-modal {
+  width: min(560px, 100%);
+  padding: 28px 30px;
+}
+
+.server-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.server-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.server-settings-content .settings-head h2 {
+  font-size: 22px;
+}
+
+.server-settings-content .form-field input,
+.server-settings-content .form-field select {
+  background: var(--bg-1);
+}
+
+/* Роли */
+
+.roles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.role-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.13s ease, background 0.13s ease;
+}
+
+.role-row:hover {
+  background: var(--bg-4);
+  border-color: var(--border-strong);
+}
+
+.role-color-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.role-row-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-row-perms {
+  font-size: 10.5px;
+  color: var(--muted);
+  flex: none;
+}
+
+.role-row-hoist {
+  font-size: 9.5px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex: none;
+}
+
+.role-editor {
+  background: var(--bg-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.role-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.permission-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+}
+
+.permission-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 7px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  line-height: 1.35;
+}
+
+.permission-item:hover {
+  background: var(--hover);
+}
+
+.permission-item.danger {
+  color: #ff9b9d;
+}
+
+.permission-item input {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin-top: 1px;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+.inline-confirm {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: var(--red-soft);
+  border: 1px solid rgba(242, 63, 67, 0.26);
+  font-size: 12px;
+  color: #ff9b9d;
+  margin-top: 4px;
+}
+
+.inline-confirm > span {
+  flex: 1;
+}
+
+.member-admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.member-admin-row {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-3);
+  overflow: hidden;
+}
+
+.member-admin-row.expanded {
+  border-color: var(--border-strong);
+}
+
+.member-admin-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+}
+
+.member-admin-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.member-admin-info strong {
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-admin-info span {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.member-admin-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 260px;
+}
+
+.role-chip {
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border: 1px solid;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.15);
+  white-space: nowrap;
+}
+
+.member-admin-expand {
+  padding: 0 10px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.member-admin-expand-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.role-check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 7px;
+}
+
+.role-check-list.compact {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.role-check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.role-check-row:hover,
+.role-check-row.active {
+  background: var(--hover);
+}
+
+.role-check-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-check-perms {
+  font-size: 10px;
+  color: var(--muted-2);
+}
+
+.role-check-row .dm-check {
+  width: 19px;
+  height: 19px;
+  border-radius: 5px;
+  border: 1px solid var(--border-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex: none;
+}
+
+.role-check-row .dm-check.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.roles-target {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+
+.roles-target > div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.roles-target strong {
+  font-size: 14px;
+}
+
+.roles-target span {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* Баны */
+
+.ban-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.ban-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+
+.ban-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ban-info strong {
+  font-size: 12.5px;
+}
+
+.ban-info span,
+.ban-date {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.ban-user {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px;
+  border-radius: 9px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+
+.ban-user > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ban-user strong {
+  font-size: 14px;
+}
+
+.ban-user span {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* --------------------------------------------------------------------------
+   Профиль
+   -------------------------------------------------------------------------- */
+
+.profile-overlay {
+  background: rgba(4, 5, 10, 0.64);
+}
+
+.profile-modal {
+  padding: 0;
+  overflow-y: auto;
+}
+
+.profile-banner {
+  height: 118px;
+  position: relative;
+  overflow: hidden;
+  flex: none;
+}
+
+.profile-banner-glow {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.25), transparent 60%);
+}
+
+.profile-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 0 24px 14px;
+  position: relative;
+}
+
+.profile-avatar {
+  margin-top: -46px;
+  border: 5px solid var(--bg-4);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+.profile-head-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-bottom: 2px;
+}
+
+.profile-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-name-row h2 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.profile-friend-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #8ce0b1;
+  background: var(--green-soft);
+  border: 1px solid rgba(35, 165, 90, 0.28);
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+.profile-username {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.profile-status {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.profile-custom {
+  color: var(--muted);
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-body {
+  padding: 4px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.profile-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.profile-section h3 {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.profile-bio {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.profile-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.profile-meta > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-meta svg {
+  color: var(--muted-2);
+  flex: none;
+}
+
+.mutual-servers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mutual-server {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 9px 4px 4px;
+  border-radius: 7px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.mutual-server-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  flex: none;
+}
+
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.profile-actions .btn {
+  flex: 1;
+  min-width: 130px;
+}
+
+/* --------------------------------------------------------------------------
+   Закреплённые сообщения
+   -------------------------------------------------------------------------- */
+
+.pins-modal {
+  padding: 0;
+}
+
+.pin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pin-head h2 {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.pin-head p {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.pins-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.pin-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.pin-row:hover {
+  background: var(--bg-3);
+  border-color: var(--border);
+}
+
+.pin-main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pin-main .search-result-head {
+  margin: 0;
+}
+
+.pin-main p {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.pin-attachment {
+  font-size: 10.5px;
+  color: var(--accent);
+}
+
+.pins-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.pins-empty svg {
+  color: var(--accent);
+  opacity: 0.65;
+}
+
+/* --------------------------------------------------------------------------
+   Поиск
+   -------------------------------------------------------------------------- */
+
+.search-overlay {
+  align-items: flex-start;
+  padding-top: 8vh;
+}
+
+.search-modal {
+  padding: 0;
+  max-height: 76vh;
+}
+
+.search-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.search-modal-head input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  padding: 2px 0;
+  font-size: 15px;
+  box-shadow: none;
+  color: var(--text);
+}
+
+.search-modal-head input:focus {
+  box-shadow: none;
+}
+
+.search-modal-head kbd {
+  flex: none;
+}
+
+.search-filters {
+  display: flex;
+  gap: 4px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.search-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.search-filters button {
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.search-filters button:hover {
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.search-filters button.active {
+  background: var(--accent-soft);
+  color: #f2b8ff;
+}
+
+.search-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px 14px;
+}
+
+.search-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 46px 24px;
+  text-align: center;
+  color: var(--muted-2);
+  font-size: 12.5px;
+}
+
+.search-hint > svg {
+  color: var(--accent);
+  opacity: 0.6;
+  margin-bottom: 3px;
+}
+
+.search-hint p {
+  max-width: 340px;
+  line-height: 1.5;
+}
+
+.search-shortcuts {
+  display: flex;
+  gap: 18px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted-2);
+}
+
+.search-shortcuts span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search-section {
+  margin-bottom: 10px;
+}
+
+.search-section-title {
+  padding: 7px 9px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-2);
+}
+
+.search-channel-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 7px;
+  text-align: left;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.search-channel-row:hover {
+  background: var(--hover-strong);
+}
+
+.search-channel-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--bg-3);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.search-channel-row > span:nth-child(2) {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-channel-row small {
+  font-size: 10.5px;
+  color: var(--muted-2);
+}
+
+.search-empty {
+  padding: 30px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.search-modal-body .search-result {
+  padding: 8px 10px;
+}
+
+.search-modal-body .search-result.active {
+  background: var(--hover-strong);
+}
+
+.search-result-channel {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.search-modal-body .search-result-head time {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--muted-2);
+}
+
+/* --------------------------------------------------------------------------
+   Просмотр изображения
+   -------------------------------------------------------------------------- */
+
+.image-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  background: rgba(4, 5, 9, 0.94);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 30px 30px;
+  cursor: zoom-out;
+  animation: overlayIn 0.15s ease;
+}
+
+.image-modal > img {
+  max-width: 94vw;
+  max-height: calc(100vh - 120px);
+  object-fit: contain;
+  border-radius: 5px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  cursor: default;
+}
+
+.image-modal-toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 20px;
+  background: rgba(10, 11, 15, 0.9);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: default;
+}
+
+.image-modal-toolbar > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-modal-toolbar > div {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+/* --------------------------------------------------------------------------
+   Адаптив
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 1040px) {
+  .settings-modal,
+  .server-settings-modal {
+    width: 96vw;
+  }
+
+  .settings-nav,
+  .server-settings-side {
+    width: 205px;
+  }
+}
+
+@media (max-width: 800px) {
+  .settings-modal,
+  .server-settings-modal {
+    height: 92vh;
+  }
+
+  .settings-nav,
+  .server-settings-side {
+    width: 64px;
+    padding: 14px 7px;
+  }
+
+  .settings-nav-title,
+  .settings-nav-item span,
+  .settings-version,
+  .server-settings-brand > div,
+  .settings-nav-sep {
+    display: none;
+  }
+
+  .settings-nav-item {
+    justify-content: center;
+    padding: 11px 8px;
+  }
+
+  .server-settings-brand {
+    justify-content: center;
+    padding: 4px 0 13px;
+  }
+
+  .settings-content,
+  .server-settings-content {
+    padding: 22px 18px 28px;
+  }
+
+  .settings-preview-body {
+    flex-wrap: wrap;
+  }
+
+  .permission-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-actions .btn {
+    min-width: 110px;
+  }
+}
+
+@media (max-width: 620px) {
+  .create-server-modal,
+  .join-server-modal,
+  .invite-modal,
+  .new-dm-modal,
+  .dm-settings-modal,
+  .channel-settings-modal,
+  .ban-modal,
+  .roles-modal {
+    padding: 20px 16px;
+  }
+
+  .search-modal {
+    width: 100%;
+  }
+
+  .search-shortcuts {
+    display: none;
+  }
+
+  .profile-head {
+    flex-wrap: wrap;
+    padding: 0 16px 12px;
+  }
+
+  .profile-name-row h2 {
+    font-size: 19px;
+  }
+
+  .profile-body {
+    padding: 4px 16px 20px;
+  }
+
+  .channel-type-select {
+    flex-direction: column;
+  }
+
+  .settings-banner {
+    height: 70px;
+  }
+
+  .invite-code {
+    font-size: 20px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Пересылка сообщения
+   -------------------------------------------------------------------------- */
+
+.forward-modal {
+  width: 560px;
+  padding: 26px;
+}
+
+.forward-modal .modal-header {
+  padding: 0 24px 0 0;
+}
+
+.forward-modal h2 {
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.forward-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 10px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border-left: 3px solid #b45cff;
+  background: var(--bg-1);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.forward-preview-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.forward-preview-badge {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.forward-preview time {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--muted-2);
+}
+
+.forward-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.forward-group + .forward-group {
+  margin-top: 8px;
+}
+
+.forward-group-title {
+  margin: 6px 8px 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-2);
+}
+
+.forward-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 7px;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+
+.forward-row:hover {
+  background: var(--hover);
+}
+
+.forward-row.active {
+  background: var(--hover-strong);
+}
+
+.forward-row-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--muted);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+
+.forward-row-icon.saved {
+  color: #fff;
+  background: linear-gradient(135deg, #4f8cff, #7c3aed);
+  border-color: transparent;
+}
+
+.forward-row-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.forward-row-name strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.forward-row-name small {
+  font-size: 11px;
+  color: var(--muted-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.forward-counter {
+  flex: 1;
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
+
+.forward-modal .modal-actions {
+  margin-top: 16px;
+  align-items: center;
+}

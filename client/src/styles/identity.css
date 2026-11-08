@@ -1,0 +1,628 @@
+/* ==========================================================================
+   Carnage Party — фирменный слой
+   Гибрид Discord (каркас, каналы, участники) и Telegram (пузыри сообщений).
+   Подключается последним и мягко переопределяет базовые стили.
+   ========================================================================== */
+
+:root {
+  --bubble-mine: linear-gradient(135deg, #6d28d9 0%, #ad1fbe 55%, #d61f5c 100%);
+  --bubble-other: #1d1729;
+  --bubble-other-2: #191320;
+}
+
+/* --------------------------------------------------------------------------
+   Общий фон и каркас
+   -------------------------------------------------------------------------- */
+
+.app {
+  background:
+    radial-gradient(1100px 640px at 84% -12%, rgba(124, 58, 237, 0.18), transparent 66%),
+    radial-gradient(900px 560px at 10% 112%, rgba(255, 61, 113, 0.12), transparent 62%),
+    var(--bg-0);
+}
+
+.app-main {
+  background: transparent;
+}
+
+/* Полоса серверов */
+
+.server-rail {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 240px),
+    var(--bg-1);
+  border-right: 1px solid rgba(255, 240, 255, 0.045);
+}
+
+.rail-item.active::before {
+  width: 4px;
+  height: 26px;
+  background: var(--gradient);
+  box-shadow: 0 0 12px rgba(224, 71, 210, 0.55);
+}
+
+.rail-item:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.rail-separator {
+  background: linear-gradient(90deg, transparent, var(--border-strong), transparent);
+}
+
+/* Боковые панели */
+
+.sidebar {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 260px),
+    var(--bg-2);
+  border-right: 1px solid rgba(255, 240, 255, 0.04);
+}
+
+.sidebar-header {
+  background: color-mix(in srgb, var(--bg-2) 84%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.home-nav-item {
+  border-radius: 9px;
+}
+
+.home-nav-item.active {
+  background: linear-gradient(90deg, var(--accent-soft), rgba(255, 255, 255, 0.035));
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.dm-row,
+.channel-row {
+  border-radius: 9px;
+}
+
+.dm-row:hover,
+.channel-row:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.dm-row.active,
+.channel-row.active {
+  background: linear-gradient(90deg, var(--accent-soft), rgba(255, 255, 255, 0.03));
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.sidebar-section-label {
+  letter-spacing: 0.09em;
+}
+
+/* --------------------------------------------------------------------------
+   Шапка чата и вкладки голосовой комнаты
+   -------------------------------------------------------------------------- */
+
+.chat-area,
+.friends-view {
+  background:
+    radial-gradient(900px 420px at 78% -8%, rgba(124, 58, 237, 0.09), transparent 70%),
+    var(--bg-4);
+}
+
+.chat-header {
+  background: color-mix(in srgb, var(--bg-4) 82%, transparent);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
+}
+
+.friends-header {
+  background: color-mix(in srgb, var(--bg-4) 82%, transparent);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.chat-title h1 {
+  letter-spacing: -0.01em;
+}
+
+.chat-topic {
+  color: var(--muted-2);
+}
+
+.chat-header-actions .icon-btn {
+  border-radius: 9px;
+}
+
+.chat-header-actions .icon-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.voice-room-tabs {
+  background: color-mix(in srgb, var(--bg-4) 88%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+
+.voice-room-tab-group {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 3px;
+}
+
+.voice-room-tab {
+  border-radius: 99px;
+}
+
+.voice-room-tab.active {
+  background: var(--gradient);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(224, 71, 210, 0.3);
+}
+
+/* --------------------------------------------------------------------------
+   Сообщения — телеграм-пузыри
+   -------------------------------------------------------------------------- */
+
+.messages {
+  padding: 12px 10px 6px;
+  gap: 2px;
+}
+
+.message {
+  align-items: flex-end;
+  gap: 8px;
+  padding: 2px 20px;
+  border-radius: 0;
+}
+
+.message:hover {
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.message.grouped {
+  padding-top: 1px;
+  padding-bottom: 1px;
+}
+
+.message-gutter {
+  width: 42px;
+  align-items: flex-end;
+  padding-top: 0;
+  padding-bottom: 4px;
+}
+
+.message.grouped .message-gutter {
+  align-items: flex-end;
+  min-height: 20px;
+}
+
+.message-body {
+  flex: 0 1 auto;
+  max-width: min(700px, 78%);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px 13px 7px;
+  border-radius: 16px 16px 16px 5px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(0, 0, 0, 0.06)), var(--bubble-other);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16);
+}
+
+.message.mine {
+  flex-direction: row-reverse;
+}
+
+.message.mine .message-gutter {
+  display: none;
+}
+
+.message.mine .message-body {
+  align-items: flex-end;
+  border-radius: 16px 16px 5px 16px;
+  background: var(--bubble-mine);
+  border-color: rgba(255, 255, 255, 0.13);
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.26);
+}
+
+.message.mine .message-head {
+  justify-content: flex-end;
+}
+
+.message.mine .message-author {
+  color: #fff;
+}
+
+.message.mine .message-time,
+.message.mine .message-edited {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.message.mine .message-content {
+  color: #fff;
+}
+
+.message.mine .message-content a {
+  color: #ffe1f7;
+}
+
+.message.mine .message-content code {
+  background: rgba(0, 0, 0, 0.24);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.message.mine .message-content blockquote {
+  border-left-color: rgba(255, 255, 255, 0.4);
+}
+
+.message.mine .reply-preview,
+.message.mine .forwarded-label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.message.mine .reply-preview-author,
+.message.mine .reply-preview:hover {
+  color: #fff;
+}
+
+.message.mine .reply-preview::before {
+  border-color: rgba(255, 255, 255, 0.42);
+}
+
+.message.mine .forwarded-label b,
+.message.mine .forwarded-channel {
+  color: #ffe1f7;
+}
+
+.message.mine .message-receipt {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.message.mine .message-receipt.read {
+  color: #b8f5ff;
+}
+
+.message.mine .attachment-file,
+.message.mine .attachment-audio {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.message.mine .attachment-file-info small {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.message.mine .attachment-file-icon {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.message.mine .voice-message {
+  background: rgba(0, 0, 0, 0.18);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.message.mine .voice-message:hover,
+.message.mine .voice-message.playing {
+  background: rgba(0, 0, 0, 0.26);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.message.mine .voice-message-bar {
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.message.mine .voice-message-bar.played {
+  background: #fff;
+}
+
+.message.mine .voice-message-meta {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.message.mine .reaction {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.message.mine .reaction.active {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.message.mine .message-actions {
+  right: auto;
+  left: 8px;
+  top: 0;
+}
+
+.message.mine .message-pinned-flag {
+  left: auto;
+  right: 58px;
+}
+
+.message-actions {
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-3) 92%, black);
+  border-color: var(--border-strong);
+  backdrop-filter: blur(10px);
+}
+
+.message-action {
+  border-radius: 6px;
+}
+
+/* День и системные сообщения */
+
+.day-divider {
+  padding: 16px 24px 10px;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
+.day-divider::before,
+.day-divider::after {
+  display: none;
+}
+
+.day-divider span {
+  padding: 4px 13px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(6px);
+  color: var(--muted);
+}
+
+.message-system {
+  justify-content: center;
+  padding: 6px 24px;
+  font-size: 11.5px;
+}
+
+.message-system > span {
+  padding: 5px 13px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.message-system time {
+  margin-left: 2px;
+}
+
+.channel-start {
+  justify-content: center;
+  border-bottom: none;
+  padding: 16px 24px 4px;
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
+
+/* Приветственный блок канала */
+
+.channel-intro {
+  align-items: center;
+  text-align: center;
+  max-width: 620px;
+  margin: 22px auto 8px;
+  padding: 32px 26px 22px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+}
+
+.channel-intro p {
+  max-width: 460px;
+}
+
+.channel-intro-actions {
+  justify-content: center;
+}
+
+.intro-icon {
+  box-shadow: 0 14px 36px rgba(224, 71, 210, 0.32);
+}
+
+/* --------------------------------------------------------------------------
+   Поле ввода
+   -------------------------------------------------------------------------- */
+
+.message-input-wrap {
+  padding: 4px 18px 10px;
+  background: linear-gradient(180deg, transparent, rgba(11, 9, 16, 0.32));
+}
+
+.message-input-bar {
+  background: color-mix(in srgb, var(--bg-3) 92%, transparent);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  padding: 6px 7px 6px 9px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.26);
+}
+
+.message-input-bar:focus-within {
+  border-color: rgba(224, 71, 210, 0.55);
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 12px 32px rgba(0, 0, 0, 0.3);
+}
+
+.message-input {
+  padding: 6px 7px;
+}
+
+.message-input::placeholder {
+  color: var(--muted-2);
+}
+
+.send-btn {
+  border-radius: 50%;
+}
+
+.send-btn.active {
+  box-shadow: 0 5px 16px rgba(224, 71, 210, 0.42);
+}
+
+.input-hints {
+  padding-left: 8px;
+  opacity: 0.62;
+}
+
+.reply-bar {
+  background: color-mix(in srgb, var(--bg-3) 88%, transparent);
+  border-color: var(--border-strong);
+  border-radius: 12px;
+}
+
+.drop-overlay {
+  background: rgba(11, 9, 16, 0.92);
+  border-radius: 16px;
+}
+
+.mention-popup {
+  background: color-mix(in srgb, var(--bg-2) 94%, black);
+  border-radius: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   Участники и панель пользователя
+   -------------------------------------------------------------------------- */
+
+.member-list {
+  background: color-mix(in srgb, var(--bg-2) 92%, transparent);
+  border-left: 1px solid var(--border);
+}
+
+.member-list-head {
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.member-count {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+}
+
+.member-row {
+  border-radius: 8px;
+}
+
+.member-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.user-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
+    var(--bg-1);
+  border-top: 1px solid var(--border);
+}
+
+.user-panel::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 16%;
+  right: 16%;
+  height: 1px;
+  background: var(--gradient);
+  opacity: 0.55;
+}
+
+.voice-dock {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.voice-dock.connecting {
+  border-color: rgba(240, 178, 50, 0.32);
+}
+
+.voice-dock-icon.connected {
+  background: var(--green-soft);
+  color: var(--green);
+  box-shadow: 0 0 0 1px rgba(35, 165, 90, 0.28);
+}
+
+/* --------------------------------------------------------------------------
+   Модальные окна, карточки, кнопки
+   -------------------------------------------------------------------------- */
+
+.modal {
+  background:
+    radial-gradient(600px 260px at 100% 0%, rgba(124, 58, 237, 0.1), transparent 70%),
+    linear-gradient(180deg, var(--bg-3), var(--bg-2));
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.62);
+}
+
+.modal-header {
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-overlay {
+  background: rgba(7, 5, 11, 0.74);
+  backdrop-filter: blur(7px);
+}
+
+.theme-card {
+  border-radius: 12px;
+}
+
+.theme-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.theme-preview {
+  border-radius: 8px;
+}
+
+.btn-primary {
+  background: var(--gradient);
+  box-shadow: 0 6px 18px rgba(224, 71, 210, 0.26);
+}
+
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+
+/* --------------------------------------------------------------------------
+   Скроллбары
+   -------------------------------------------------------------------------- */
+
+* {
+  scrollbar-color: rgba(224, 71, 210, 0.32) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(224, 71, 210, 0.26);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(224, 71, 210, 0.42);
+  background-clip: content-box;
+}
+
+/* --------------------------------------------------------------------------
+   Тесные окна
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .message-body {
+    max-width: 86%;
+  }
+}

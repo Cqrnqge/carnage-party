@@ -1,0 +1,31 @@
+# dependencies
+node_modules/
+client/node_modules/
+
+# build output
+client/dist/
+mobile/www/
+mobile/build/
+mobile/.sdk/
+release/
+backup/
+
+# runtime data and secrets
+data/
+server.txt
+*.log
+*.pid
+.env
+.env.*
+
+# signing key
+mobile/keystore/
+
+# local previews
+client/public/__mobile-preview.html
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

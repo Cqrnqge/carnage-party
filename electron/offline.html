@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Carnage Party — сервер недоступен</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #111214;
+      --card: #1b1d22;
+      --card-2: #23262d;
+      --border: #32363f;
+      --text: #f2f3f5;
+      --muted: #a3a8b3;
+      --accent: #5865f2;
+      --accent-2: #7c3aed;
+      --danger: #ed4245;
+      --ok: #23a55a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(900px 500px at 15% 0%, rgba(88, 101, 242, 0.28), transparent 60%),
+        radial-gradient(800px 500px at 90% 100%, rgba(124, 58, 237, 0.2), transparent 60%),
+        var(--bg);
+    }
+    .card {
+      width: min(560px, 100%);
+      background: linear-gradient(180deg, rgba(255,255,255,0.035), transparent 35%), var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 30px 30px 26px;
+      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    .logo {
+      width: 42px;
+      height: 42px;
+      border-radius: 13px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 8px 22px rgba(88, 101, 242, 0.42);
+      font-size: 21px;
+    }
+    .brand strong { display: block; font-size: 17px; letter-spacing: -0.02em; }
+    .brand span { display: block; margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+    h1 { margin: 0 0 8px; font-size: 24px; letter-spacing: -0.03em; }
+    .lead { margin: 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .failed {
+      margin: 0 0 18px;
+      padding: 11px 13px;
+      border: 1px solid rgba(237, 66, 69, 0.32);
+      border-radius: 10px;
+      background: rgba(237, 66, 69, 0.09);
+      font-size: 12px;
+      line-height: 1.5;
+      word-break: break-all;
+    }
+    .failed b { color: #ffb4b5; font-weight: 600; }
+    .failed span { color: #d8dbe2; }
+    label { display: block; margin-bottom: 7px; font-size: 12px; font-weight: 600; color: #c9ccd4; }
+    input {
+      width: 100%;
+      height: 44px;
+      padding: 0 13px;
+      border-radius: 9px;
+      border: 1px solid var(--border);
+      background: #121419;
+      color: var(--text);
+      font: inherit;
+      font-size: 13.5px;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.18); }
+    .hint { margin: 7px 0 16px; font-size: 11.5px; color: var(--muted); }
+    .actions { display: flex; flex-wrap: wrap; gap: 9px; }
+    button {
+      height: 42px;
+      padding: 0 17px;
+      border-radius: 9px;
+      border: 1px solid transparent;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform .12s, filter .12s, background .12s;
+    }
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: .55; cursor: default; }
+    .primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; box-shadow: 0 8px 20px rgba(88, 101, 242, .32); }
+    .primary:hover:not(:disabled) { filter: brightness(1.08); }
+    .secondary { background: var(--card-2); border-color: var(--border); color: var(--text); }
+    .secondary:hover:not(:disabled) { background: #2b2f37; }
+    .ghost { background: transparent; color: var(--muted); }
+    .ghost:hover:not(:disabled) { color: var(--text); background: rgba(255,255,255,.05); }
+    .status { min-height: 20px; margin-top: 16px; font-size: 12.5px; color: var(--muted); }
+    .status.error { color: #ff9a9c; }
+    .status.ok { color: #7ee2a8; }
+    .foot { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 11.5px; color: #7f8490; line-height: 1.55; }
+    .foot code { color: #b9bdc7; }
+    .spin {
+      display: inline-block;
+      width: 13px;
+      height: 13px;
+      margin-right: 6px;
+      vertical-align: -2px;
+      border: 2px solid rgba(255,255,255,.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">
+      <div class="logo">🔥</div>
+      <div>
+        <strong>Carnage Party</strong>
+        <span>Твоя стая. Твой голос. Твоя вечеринка.</span>
+      </div>
+    </div>
+
+    <h1>Сервер недоступен</h1>
+    <p class="lead">Не удалось открыть сервер Carnage Party. Проверьте, что он запущен, и укажите правильный адрес.</p>
+
+    <div class="failed" id="failed" hidden>
+      <b>Адрес:</b> <span id="failedUrl"></span><br />
+      <b>Ошибка:</b> <span id="failedError"></span>
+    </div>
+
+    <label for="url">Адрес сервера</label>
+    <input id="url" type="text" spellcheck="false" placeholder="http://188.234.161.207:3001" autocomplete="off" />
+    <p class="hint" id="hint">Например: http://188.234.161.207:3001</p>
+
+    <div class="actions">
+      <button class="primary" id="connect" type="button">Подключиться</button>
+      <button class="secondary" id="retry" type="button">Повторить</button>
+      <button class="ghost" id="local" type="button">Локальный сервер</button>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <div class="foot">
+      Если сервер запущен на другом ПК, попросите его владельца выполнить
+      <code>server-lan.bat</code> и сообщить адрес. VPN-адреса
+      (Amnezia, WireGuard) другим пользователям не подходят.
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const params = new URLSearchParams(location.search);
+      const failedUrl = params.get('url') || '';
+      const failedError = params.get('error') || '';
+      const urlInput = document.getElementById('url');
+      const hint = document.getElementById('hint');
+      const status = document.getElementById('status');
+      const failedBox = document.getElementById('failed');
+      const connectBtn = document.getElementById('connect');
+      const retryBtn = document.getElementById('retry');
+      const localBtn = document.getElementById('local');
+      const desktop = window.desktop;
+
+      if (failedUrl) {
+        document.getElementById('failedUrl').textContent = failedUrl;
+        document.getElementById('failedError').textContent = failedError || 'нет соединения';
+        failedBox.hidden = false;
+        urlInput.value = failedUrl;
+      }
+
+      function setStatus(text, kind = '') {
+        status.textContent = text || '';
+        status.className = 'status' + (kind ? ' ' + kind : '');
+      }
+
+      function setBusy(busy) {
+        connectBtn.disabled = busy;
+        retryBtn.disabled = busy;
+        localBtn.disabled = busy;
+      }
+
+      async function loadConfig() {
+        if (!desktop?.getServerConfig) {
+          setStatus('Настройка сервера доступна только в приложении Carnage Party.', 'error');
+          return;
+        }
+        try {
+          const info = await desktop.getServerConfig();
+          if (!urlInput.value) {
+            urlInput.value = info.mode === 'remote' ? info.current : (info.defaultUrl || '');
+          }
+          if (info.defaultUrl) {
+            hint.textContent = 'Адрес по умолчанию: ' + info.defaultUrl;
+          }
+        } catch (err) {
+          setStatus('Не удалось прочитать настройки: ' + err.message, 'error');
+        }
+      }
+
+      async function connect() {
+        if (!desktop?.setServer) return;
+        const url = urlInput.value.trim();
+        if (!url) {
+          setStatus('Введите адрес сервера.', 'error');
+          urlInput.focus();
+          return;
+        }
+        setBusy(true);
+        setStatus('Подключаюсь к ' + url + '…');
+        try {
+          const result = await desktop.setServer({ mode: 'remote', url });
+          if (!result?.ok) {
+            setStatus(result?.error || 'Не удалось подключиться.', 'error');
+            setBusy(false);
+            return;
+          }
+          if (result.restarted) {
+            setStatus('Адрес сохранён. Приложение перезапускается…', 'ok');
+          } else {
+            setStatus('Подключено. Загружаю…', 'ok');
+          }
+        } catch (err) {
+          setStatus('Ошибка: ' + err.message, 'error');
+          setBusy(false);
+        }
+      }
+
+      async function retry() {
+        if (!desktop?.retryServer) return;
+        setBusy(true);
+        setStatus('Повторяю подключение…');
+        try {
+          const result = await desktop.retryServer();
+          if (!result?.ok) setStatus(result?.error || 'Сервер всё ещё недоступен.', 'error');
+          else setStatus('Подключено. Загружаю…', 'ok');
+        } catch (err) {
+          setStatus('Ошибка: ' + err.message, 'error');
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function useLocal() {
+        if (!desktop?.setServer) return;
+        setBusy(true);
+        setStatus('Запускаю локальный сервер на этом ПК…');
+        try {
+          const result = await desktop.setServer({ mode: 'local' });
+          if (!result?.ok) {
+            setStatus(result?.error || 'Не удалось запустить локальный сервер.', 'error');
+            setBusy(false);
+          } else {
+            setStatus('Локальный сервер запущен. Загружаю…', 'ok');
+          }
+        } catch (err) {
+          setStatus('Ошибка: ' + err.message, 'error');
+          setBusy(false);
+        }
+      }
+
+      connectBtn.addEventListener('click', connect);
+      retryBtn.addEventListener('click', retry);
+      localBtn.addEventListener('click', useLocal);
+      urlInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') connect();
+      });
+
+      loadConfig();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,556 @@
+/* ==========================================================================
+   Carnage Party — мобильный клиент (Android APK и узкие экраны)
+   ========================================================================== */
+
+/* На компьютере обёртка навигации не должна ломать прежний flex-каркас. */
+.app-nav {
+  display: contents;
+}
+
+.mobile-tabbar {
+  display: none;
+}
+
+.mobile-backdrop,
+.mobile-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: rgba(6, 4, 9, 0.62);
+  backdrop-filter: blur(2px);
+  animation: mobileFade 0.16s ease;
+}
+
+.mobile-backdrop {
+  z-index: 60;
+}
+
+.mobile-sheet-backdrop {
+  z-index: 64;
+}
+
+@keyframes mobileFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes mobileSheetIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+/* --------------------------------------------------------------------------
+   Каркас
+   -------------------------------------------------------------------------- */
+
+.mobile-client {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.mobile-client .app-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 70;
+  display: flex;
+  width: min(88vw, 370px);
+  max-width: 100%;
+  transform: translateX(-104%);
+  visibility: hidden;
+  transition: transform 0.22s cubic-bezier(0.22, 0.8, 0.28, 1), visibility 0.22s;
+  background: var(--bg-1);
+  box-shadow: 18px 0 48px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.mobile-client .app-nav.open {
+  transform: translateX(0);
+  visibility: visible;
+}
+
+.mobile-client .app-nav .server-rail {
+  width: 66px;
+  height: 100%;
+  padding-top: calc(10px + env(safe-area-inset-top));
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  flex: none;
+}
+
+.mobile-client .app-nav .sidebar {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  border-right: none;
+}
+
+.mobile-client .app-nav .sidebar-header {
+  padding-top: calc(8px + env(safe-area-inset-top));
+}
+
+.mobile-client .app-nav .user-panel {
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+}
+
+.mobile-client .app-main {
+  width: 100%;
+  height: 100%;
+  padding-bottom: calc(62px + env(safe-area-inset-bottom));
+  transition: padding-bottom 0.18s ease;
+}
+
+.mobile-client.mobile-voice-open .app-main {
+  padding-bottom: calc(160px + env(safe-area-inset-bottom));
+}
+
+.mobile-client .connection-banner {
+  top: 6px;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 24px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------------------
+   Нижняя панель вкладок
+   -------------------------------------------------------------------------- */
+
+.mobile-client .mobile-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: stretch;
+  height: calc(58px + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--bg-1);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(14px);
+}
+
+.mobile-tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 2px 5px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: color 0.14s ease, background 0.14s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-tab::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 26px;
+  height: 2px;
+  border-radius: 0 0 3px 3px;
+  background: transparent;
+  transform: translateX(-50%);
+  transition: background 0.14s ease;
+}
+
+.mobile-tab.active {
+  color: var(--text);
+}
+
+.mobile-tab.active::before {
+  background: var(--accent);
+}
+
+.mobile-tab:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.mobile-tab-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+}
+
+.mobile-tab-badge {
+  position: absolute;
+  top: -4px;
+  right: -9px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--bg-1);
+}
+
+.mobile-tab-badge.mention {
+  background: #ff3d6e;
+}
+
+/* --------------------------------------------------------------------------
+   Голосовой док над вкладками
+   -------------------------------------------------------------------------- */
+
+.mobile-client .mobile-voice-dock {
+  position: fixed;
+  left: 6px;
+  right: 6px;
+  bottom: calc(60px + env(safe-area-inset-bottom));
+  z-index: 46;
+}
+
+.mobile-client .mobile-voice-dock .voice-dock {
+  margin: 0;
+  border-radius: 12px;
+  background: var(--bg-2);
+  box-shadow: 0 -10px 26px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+}
+
+.mobile-client .mobile-voice-dock .voice-dock-actions .icon-btn {
+  width: 32px;
+  height: 32px;
+}
+
+/* --------------------------------------------------------------------------
+   Шапки, чат и участники
+   -------------------------------------------------------------------------- */
+
+.mobile-client .chat-header {
+  height: 56px;
+  padding: 0 8px 0 6px;
+  gap: 8px;
+}
+
+.mobile-client .chat-title {
+  gap: 7px;
+}
+
+.mobile-client .chat-title-text h1 {
+  max-width: 100%;
+  font-size: 15px;
+}
+
+.mobile-client .chat-header-actions {
+  gap: 1px;
+  flex: none;
+}
+
+.mobile-client .chat-header-actions .icon-btn {
+  width: 36px;
+  height: 36px;
+}
+
+/* На телефоне список участников открывается отдельной шторкой,
+   поэтому кнопка должна оставаться доступной. */
+.mobile-client .chat-header-actions .icon-btn:nth-child(2),
+.mobile-client .chat-header-actions .icon-btn:nth-child(3) {
+  display: inline-flex;
+}
+
+.mobile-client .mobile-menu-btn {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: 10px;
+}
+
+.mobile-client .mobile-hide {
+  display: none !important;
+}
+
+.mobile-client .mobile-sheet-backdrop {
+  display: block;
+}
+
+.mobile-client .member-list {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 65;
+  display: flex;
+  width: min(86vw, 340px);
+  max-width: 100%;
+  height: 100%;
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: -18px 0 44px rgba(0, 0, 0, 0.5);
+  animation: mobileSheetIn 0.2s cubic-bezier(0.22, 0.8, 0.28, 1);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.mobile-client .member-list-head {
+  height: 58px;
+  padding: 0 10px 0 16px;
+}
+
+.mobile-client .mobile-members-close {
+  display: inline-flex !important;
+}
+
+.mobile-client .message-input-wrap {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.mobile-client .messages {
+  padding-left: 4px;
+  padding-right: 8px;
+}
+
+.mobile-client .message {
+  padding-right: 6px;
+}
+
+.mobile-client .message-gutter {
+  width: 46px;
+}
+
+/* --------------------------------------------------------------------------
+   Друзья и пустой экран
+   -------------------------------------------------------------------------- */
+
+.mobile-client .friends-header {
+  padding: 0 10px;
+  min-height: 56px;
+}
+
+.mobile-client .friends-title {
+  gap: 8px;
+}
+
+.mobile-client .friends-title h1 {
+  font-size: 18px;
+}
+
+.mobile-client .friends-title > svg {
+  display: none;
+}
+
+.mobile-client .friends-search {
+  width: 100%;
+}
+
+.mobile-client .empty-main {
+  padding: 30px 20px;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------------------
+   Настройки и модальные окна
+   -------------------------------------------------------------------------- */
+
+.mobile-client .modal-overlay {
+  padding: 0;
+}
+
+.mobile-client .settings-modal {
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  border-radius: 0;
+  border: none;
+  margin: 0;
+}
+
+.mobile-client .settings-layout {
+  height: 100%;
+}
+
+.mobile-client .settings-nav {
+  width: 62px;
+  padding: calc(12px + env(safe-area-inset-top)) 6px 12px;
+}
+
+.mobile-client .settings-content {
+  padding: 20px 16px calc(30px + env(safe-area-inset-bottom));
+  flex: 1;
+  min-width: 0;
+}
+
+.mobile-client .settings-head h2 {
+  font-size: 22px;
+}
+
+.mobile-client .settings-profile-preview {
+  border-radius: 12px;
+}
+
+.mobile-client .settings-profile-body {
+  flex-wrap: wrap;
+}
+
+.mobile-client .settings-preview-body {
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+}
+
+.mobile-client .settings-preview-avatar {
+  flex: none;
+  width: 68px !important;
+  height: 68px !important;
+  margin-top: -38px;
+}
+
+.mobile-client .settings-preview-meta {
+  flex: 1 1 120px;
+  padding-top: 4px;
+}
+
+.mobile-client .settings-preview-body .btn {
+  flex: 1 1 100%;
+  justify-content: center;
+}
+
+.mobile-client .server-settings-modal {
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  border-radius: 0;
+  margin: 0;
+}
+
+.mobile-client .server-settings-layout {
+  flex-direction: column;
+  height: 100%;
+}
+
+.mobile-client .server-settings-side {
+  width: 100%;
+  flex-direction: row;
+  align-items: center;
+  padding: calc(10px + env(safe-area-inset-top)) 10px 10px;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.mobile-client .server-settings-nav {
+  flex-direction: row;
+  gap: 4px;
+}
+
+.mobile-client .server-settings-nav button span {
+  display: none;
+}
+
+.mobile-client .server-settings-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 14px calc(28px + env(safe-area-inset-bottom));
+}
+
+.mobile-client .modal {
+  max-height: calc(100vh - 16px);
+}
+
+.mobile-client .image-modal-toolbar {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* --------------------------------------------------------------------------
+   Голосовая комната
+   -------------------------------------------------------------------------- */
+
+.mobile-client .voice-stage-fullscreen {
+  z-index: 1100;
+}
+
+.mobile-client .voice-controls {
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+}
+
+.mobile-client .voice-grid {
+  padding: 8px;
+  gap: 8px;
+}
+
+.mobile-client .voice-tile-fullscreen {
+  width: 40px;
+  height: 40px;
+}
+
+.mobile-client .voice-stream-fullscreen-bar {
+  top: calc(10px + env(safe-area-inset-top));
+}
+
+.mobile-client .voice-stream-fullscreen-bar .icon-btn {
+  width: 44px;
+  height: 44px;
+}
+
+/* --------------------------------------------------------------------------
+   Экран входа и заставка
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 560px) {
+  .auth-screen {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  .auth-hero {
+    padding-top: calc(26px + env(safe-area-inset-top));
+  }
+
+  .auth-panel {
+    padding-bottom: calc(22px + env(safe-area-inset-bottom));
+  }
+
+  .auth-footer {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .auth-footer-right {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .splash {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .splash-server-btn {
+    margin-top: 10px;
+  }
+}

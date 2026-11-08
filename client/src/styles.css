@@ -1,0 +1,121 @@
+/* ==========================================================================
+   Carnage Party — точка входа темы
+   ========================================================================== */
+
+@import "./styles/base.css";
+@import "./styles/auth.css";
+@import "./styles/layout.css";
+@import "./styles/chat.css";
+@import "./styles/friends.css";
+@import "./styles/modals.css";
+@import "./styles/voice.css";
+@import "./styles/emoji.css";
+@import "./styles/identity.css";
+@import "./styles/mobile.css";
+
+/* --------------------------------------------------------------------------
+   Компактный режим
+   -------------------------------------------------------------------------- */
+
+.app.compact .message {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.app.compact .message-content {
+  font-size: 13.5px;
+  line-height: 1.35;
+}
+
+.app.compact .message-avatar {
+  zoom: 0.86;
+}
+
+.app.compact .messages {
+  padding-top: 4px;
+}
+
+.app.compact .voice-dock {
+  margin-bottom: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   Отдельные состояния
+   -------------------------------------------------------------------------- */
+
+.app-main > .chat-area,
+.app-main > .friends-view {
+  height: 100%;
+}
+
+.app-main > .empty-main {
+  height: 100%;
+}
+
+.toast > span {
+  display: block;
+}
+
+.user-panel + .voice-dock {
+  margin-bottom: 8px;
+}
+
+.settings-content > .form-field,
+.server-settings-content > .form-field {
+  max-width: 100%;
+}
+
+.modal-form > .settings-label:first-child {
+  margin-top: 0;
+}
+
+.inline-code,
+.code-block {
+  unicode-bidi: plaintext;
+}
+
+@media (max-width: 720px) {
+  .chat-title-text h1 {
+    max-width: 60%;
+  }
+
+  .chat-title-text .chat-topic {
+    display: none;
+  }
+}
+
+@media (max-height: 700px) {
+  .voice-grid {
+    align-content: stretch;
+  }
+
+  .voice-tile {
+    min-height: 100px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Печать (на всякий случай)
+   -------------------------------------------------------------------------- */
+
+@media print {
+  .server-rail,
+  .sidebar,
+  .chat-header-actions,
+  .message-input-wrap,
+  .member-list,
+  .voice-stage {
+    display: none !important;
+  }
+
+  .app,
+  .app-main,
+  .chat-area,
+  .chat-content,
+  .chat-main,
+  .message-list {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "name": "carnage-party",
+  "productName": "Carnage Party",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Carnage Party — полноценный мессенджер в стиле Discord на Electron + React",
+  "main": "electron/main.cjs",
+  "author": "Carnage Party",
+  "license": "MIT",
+  "scripts": {
+    "setup": "npm install && npm --prefix client install",
+    "start": "npm run build:client && electron .",
+    "dev": "node scripts/dev.cjs",
+    "build:client": "npm --prefix client run build",
+    "default-server": "node scripts/write-default-server.cjs",
+    "my-ip": "node scripts/show-my-ip.cjs",
+    "dist": "node scripts/write-default-server.cjs && npm run build:client && electron-builder",
+    "dist:nsis": "node scripts/write-default-server.cjs && npm run build:client && electron-builder --win nsis",
+    "dist:portable": "node scripts/write-default-server.cjs && npm run build:client && electron-builder --win portable",
+    "dist:dir": "node scripts/write-default-server.cjs && npm run build:client && electron-builder --dir",
+    "clean": "node scripts/clean.cjs",
+    "server": "node server/standalone.cjs",
+    "smoke": "node scripts/smoke-test.cjs"
+  },
+  "build": {
+    "appId": "ru.carnageparty.messenger",
+    "productName": "Carnage Party",
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "server/**/*",
+      "client/dist/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/koffi/**",
+      "node_modules/@koromix/**"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Carnage Party",
+      "artifactName": "Carnage-Party-Setup-${version}.${ext}",
+      "uninstallDisplayName": "Carnage Party"
+    },
+    "portable": {
+      "artifactName": "Carnage-Party-Portable-${version}.${ext}"
+    }
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "koffi": "^3.3.7",
+    "multer": "^2.5.0",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  }
+}

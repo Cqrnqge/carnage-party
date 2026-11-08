@@ -1,0 +1,919 @@
+/* ==========================================================================
+   Carnage Party — голосовая комната, звонки, вывод звука
+   ========================================================================== */
+
+.audio-outputs {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* --------------------------------------------------------------------------
+   Голосовая комната в основной области
+   -------------------------------------------------------------------------- */
+
+.voice-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #14151a;
+  overflow: hidden;
+}
+
+.voice-stage-inline {
+  animation: voiceStageIn 0.18s ease;
+}
+
+@keyframes voiceStageIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.voice-stage-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 800;
+  flex: none;
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+  border: none;
+}
+
+.voice-stage-topbar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.voice-stage-topbar .icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  backdrop-filter: blur(6px);
+}
+
+.voice-stage-topbar .icon-btn:hover {
+  background: rgba(0, 0, 0, 0.72);
+}
+
+/* --------------------------------------------------------------------------
+   Переключатель «Чат / Комната» в голосовом канале
+   -------------------------------------------------------------------------- */
+
+.voice-room-tabs {
+  flex: none;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 12px;
+  background: var(--bg-4);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.voice-room-tab-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  min-width: 0;
+}
+
+.voice-room-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.voice-room-tab:hover {
+  color: var(--text);
+  background: var(--bg-3);
+}
+
+.voice-room-tab.active {
+  color: var(--text);
+  background: var(--bg-3);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.voice-room-count {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-5);
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.voice-room-tab.active .voice-room-count {
+  background: var(--accent-soft);
+  color: var(--accent-2);
+}
+
+.voice-room-live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff4d6d;
+  box-shadow: 0 0 0 3px rgba(255, 77, 109, 0.16);
+  animation: livePulse 1.6s infinite;
+  flex: none;
+}
+
+.voice-room-watch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 58%;
+  height: 30px;
+  padding: 0 6px 0 10px;
+  border-radius: 7px;
+  background: rgba(88, 101, 242, 0.12);
+  border: 1px solid rgba(88, 101, 242, 0.28);
+  color: #c7cdff;
+  font-size: 11.5px;
+  font-weight: 600;
+  overflow: hidden;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.voice-room-watch:hover {
+  background: rgba(88, 101, 242, 0.2);
+  border-color: rgba(88, 101, 242, 0.45);
+}
+
+.voice-room-watch-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-room-watch-action {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #fff;
+}
+
+.chat-main-voice {
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Сетка участников
+   -------------------------------------------------------------------------- */
+
+.voice-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--voice-columns, 2), minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 10px;
+  padding: 14px;
+  overflow-y: auto;
+  align-content: center;
+  background:
+    radial-gradient(700px 400px at 50% 0%, rgba(124, 58, 237, 0.09), transparent 65%),
+    #101116;
+}
+
+.voice-grid.has-screen {
+  grid-template-columns: repeat(var(--voice-columns, 2), minmax(0, 1fr));
+}
+
+.voice-tile {
+  position: relative;
+  min-height: 130px;
+  border-radius: 12px;
+  background: #1b1c22;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.voice-tile.speaking {
+  border-color: rgba(35, 165, 90, 0.65);
+  box-shadow: 0 0 0 2px rgba(35, 165, 90, 0.16), 0 0 26px rgba(35, 165, 90, 0.12);
+}
+
+.voice-tile-avatar {
+  flex-direction: column;
+  gap: 12px;
+}
+
+.voice-tile-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.4);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 600;
+  max-width: calc(100% - 20px);
+}
+
+.voice-tile-name > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-tile-badges {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+}
+
+.voice-badge {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+}
+
+.voice-badge.muted {
+  background: var(--red-soft);
+  color: #ff9b9d;
+}
+
+.voice-badge.screen {
+  background: rgba(88, 101, 242, 0.18);
+  color: #aeb7ff;
+}
+
+.voice-tile-video {
+  background: #08090c;
+}
+
+.voice-camera-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.voice-camera-video.mirror {
+  transform: scaleX(-1);
+}
+
+.voice-tile-label {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.58);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  max-width: calc(100% - 20px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff4d6d;
+  box-shadow: 0 0 0 3px rgba(255, 77, 109, 0.16);
+  animation: livePulse 1.6s infinite;
+  flex: none;
+}
+
+@keyframes livePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.voice-tile-screen {
+  position: relative;
+  grid-column: 1 / -1;
+  min-height: 240px;
+  background: #000;
+}
+
+.voice-screen-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #000;
+}
+
+.voice-tile-fullscreen {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 4;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.voice-tile-fullscreen:hover {
+  background: rgba(0, 0, 0, 0.8);
+  transform: scale(1.05);
+}
+
+.voice-stream-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #050408;
+  animation: voiceStageIn 0.15s ease;
+}
+
+.voice-stream-fullscreen-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  display: block;
+}
+
+.voice-stream-fullscreen-bar {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.voice-stream-fullscreen-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 60px);
+  padding: 7px 12px;
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+}
+
+.voice-stream-fullscreen-bar .icon-btn {
+  pointer-events: auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  backdrop-filter: blur(8px);
+}
+
+.voice-stream-fullscreen-bar .icon-btn:hover {
+  background: rgba(0, 0, 0, 0.82);
+}
+
+.voice-camera-pending {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--muted);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.voice-empty,
+.voice-connecting {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 220px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+.voice-empty svg,
+.voice-connecting svg {
+  color: var(--accent);
+  opacity: 0.7;
+}
+
+/* --------------------------------------------------------------------------
+   Нижняя панель управления
+   -------------------------------------------------------------------------- */
+
+.voice-stage-footer {
+  flex: none;
+  padding: 12px 16px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.voice-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 66px;
+  padding: 9px 10px 7px;
+  border-radius: 11px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 600;
+  transition: background 0.13s ease, border-color 0.13s ease, color 0.13s ease, transform 0.12s ease;
+}
+
+.voice-control:hover {
+  background: var(--bg-5);
+  transform: translateY(-1px);
+}
+
+.voice-control.active {
+  background: var(--accent-soft);
+  border-color: rgba(217, 70, 239, 0.4);
+  color: #f2b8ff;
+}
+
+.voice-control.active.screen {
+  background: rgba(88, 101, 242, 0.18);
+  border-color: rgba(88, 101, 242, 0.4);
+  color: #aeb7ff;
+}
+
+.voice-control.danger.active {
+  background: var(--red-soft);
+  border-color: rgba(242, 63, 67, 0.45);
+  color: #ff9b9d;
+}
+
+.voice-control.ptt {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.voice-control.ptt.active {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.5);
+  color: #7df0a6;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.18);
+}
+
+.voice-control.leave {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+
+.voice-control.leave:hover {
+  filter: brightness(1.1);
+  background: var(--red);
+}
+
+.voice-stage-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--muted);
+  min-height: 16px;
+}
+
+.voice-stage-error {
+  color: #ff9b9d;
+  margin-left: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   Входящий звонок
+   -------------------------------------------------------------------------- */
+
+.incoming-overlay {
+  z-index: 850;
+}
+
+.incoming-call {
+  width: 380px;
+  padding: 30px 26px 24px;
+  text-align: center;
+  align-items: center;
+  background:
+    radial-gradient(400px 300px at 50% 0%, rgba(35, 165, 90, 0.12), transparent 65%),
+    var(--bg-4);
+}
+
+.incoming-pulse {
+  position: relative;
+  width: 106px;
+  height: 106px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.incoming-pulse::before,
+.incoming-ring {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(35, 165, 90, 0.4);
+  animation: callRing 2s infinite ease-out;
+}
+
+.incoming-ring.delay {
+  animation-delay: 0.7s;
+}
+
+@keyframes callRing {
+  0% { transform: scale(0.6); opacity: 0.8; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+.incoming-pulse .avatar {
+  position: relative;
+  z-index: 1;
+  border: 4px solid rgba(35, 165, 90, 0.22);
+}
+
+.incoming-call h2 {
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.incoming-call > p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.incoming-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  margin: 24px 0 14px;
+}
+
+.incoming-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  transition: transform 0.13s ease, filter 0.13s ease;
+}
+
+.incoming-btn:hover {
+  transform: scale(1.06);
+  filter: brightness(1.08);
+}
+
+.incoming-btn.accept {
+  background: var(--green);
+  box-shadow: 0 8px 22px rgba(35, 165, 90, 0.34);
+}
+
+.incoming-btn.decline {
+  background: var(--red);
+  box-shadow: 0 8px 22px rgba(242, 63, 67, 0.3);
+}
+
+.incoming-hint {
+  font-size: 11px;
+  color: var(--muted-2);
+}
+
+/* --------------------------------------------------------------------------
+   Адаптив
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .voice-control {
+    min-width: 56px;
+    padding: 8px 8px 6px;
+  }
+
+  .voice-control span {
+    display: none;
+  }
+
+  .voice-room-watch {
+    max-width: 46%;
+  }
+}
+
+@media (max-width: 620px) {
+  .voice-grid {
+    grid-template-columns: 1fr !important;
+    padding: 9px;
+  }
+
+  .voice-stage-footer {
+    padding: 9px 8px 7px;
+  }
+
+  .voice-controls {
+    gap: 5px;
+  }
+
+  .voice-control {
+    min-width: 46px;
+  }
+
+  .voice-room-tabs {
+    padding: 0 8px;
+  }
+
+  .voice-room-watch {
+    display: none;
+  }
+
+  .incoming-call {
+    width: 330px;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Выбор монитора для демонстрации экрана
+   -------------------------------------------------------------------------- */
+
+.screen-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  background: rgba(5, 6, 10, 0.74);
+  backdrop-filter: blur(7px);
+  animation: screenPickerFade 0.16s ease;
+}
+
+@keyframes screenPickerFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.screen-picker {
+  width: min(900px, 100%);
+  max-height: min(720px, 92vh);
+  display: flex;
+  flex-direction: column;
+  background: #16171d;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.72);
+  overflow: hidden;
+  animation: screenPickerIn 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes screenPickerIn {
+  from { opacity: 0; transform: translateY(16px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.screen-picker-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.screen-picker-header h2 {
+  margin: 0 0 4px;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.screen-picker-header p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.screen-picker-close {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 9px;
+  background: var(--bg-5);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.screen-picker-close:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.screen-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 14px;
+  padding: 20px 24px;
+  overflow-y: auto;
+}
+
+.screen-source {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-4);
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.screen-source:hover {
+  border-color: var(--accent);
+  background: rgba(217, 70, 239, 0.07);
+  transform: translateY(-2px);
+}
+
+.screen-source-preview {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #0b0c10;
+  color: var(--muted);
+}
+
+.screen-source-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.screen-source-action {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: rgba(9, 10, 14, 0.55);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.screen-source:hover .screen-source-action {
+  opacity: 1;
+}
+
+.screen-source-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 0 3px 2px;
+}
+
+.screen-source-name {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.screen-source-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.screen-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+@media (max-width: 620px) {
+  .screen-picker-overlay {
+    padding: 10px;
+  }
+
+  .screen-picker-grid {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .screen-picker-header,
+  .screen-picker-footer {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .screen-picker-footer span {
+    display: none;
+  }
+}
