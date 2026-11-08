@@ -427,6 +427,7 @@
   align-items: center;
   justify-content: center;
   background: #050408;
+  cursor: zoom-out;
   animation: voiceStageIn 0.15s ease;
 }
 

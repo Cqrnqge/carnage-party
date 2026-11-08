@@ -70,7 +70,7 @@ function StreamVolumeControl({ className = '' }) {
   );
 }
 
-function ParticipantTile({ participant, stream, isSelf, localStream, compact, onFullscreen }) {
+function ParticipantTile({ participant, stream, isSelf, localStream, compact, onFullscreen, fullscreen }) {
   const screen = Boolean(participant.screen) && stream;
   const camera = Boolean(participant.camera);
 
@@ -78,21 +78,25 @@ function ParticipantTile({ participant, stream, isSelf, localStream, compact, on
     return (
       <div
         className="voice-tile voice-tile-screen"
-        onDoubleClick={() => onFullscreen?.(participant.userId)}
+        onDoubleClick={() => {
+          if (!fullscreen) onFullscreen?.(participant.userId);
+        }}
       >
         <VideoStream stream={stream} className="voice-screen-video" />
-        <button
-          type="button"
-          className="voice-tile-fullscreen"
-          onClick={(event) => {
-            event.stopPropagation();
-            onFullscreen?.(participant.userId);
-          }}
-          title="Развернуть трансляцию на весь экран"
-          aria-label="Развернуть трансляцию на весь экран"
-        >
-          <Maximize2 size={17} />
-        </button>
+        {!fullscreen ? (
+          <button
+            type="button"
+            className="voice-tile-fullscreen"
+            onClick={(event) => {
+              event.stopPropagation();
+              onFullscreen?.(participant.userId);
+            }}
+            title="Развернуть трансляцию на весь экран"
+            aria-label="Развернуть трансляцию на весь экран"
+          >
+            <Maximize2 size={17} />
+          </button>
+        ) : null}
         {!isSelf ? <StreamVolumeControl /> : null}
         <div className="voice-tile-label">
           <span className="voice-live-dot" />
@@ -258,27 +262,29 @@ export default function VoiceStage() {
 
   const content = (
     <div className={cx('voice-stage', 'voice-stage-inline', fullscreen && 'voice-stage-fullscreen')}>
-      <div className="voice-stage-topbar">
-        {fullscreen ? (
+      {fullscreen || !hasScreen ? (
+        <div className="voice-stage-topbar">
+          {fullscreen ? (
+            <button
+              className="icon-btn"
+              onClick={() => {
+                setFullscreen(false);
+                setVoice({ stageOpen: false });
+              }}
+              title="Вернуться в чат"
+            >
+              <MessageSquare size={18} />
+            </button>
+          ) : null}
           <button
             className="icon-btn"
-            onClick={() => {
-              setFullscreen(false);
-              setVoice({ stageOpen: false });
-            }}
-            title="Вернуться в чат"
+            onClick={() => setFullscreen((value) => !value)}
+            title={fullscreen ? 'Свернуть' : 'На весь экран'}
           >
-            <MessageSquare size={18} />
+            {fullscreen ? <Minimize2 size={19} /> : <Maximize2 size={19} />}
           </button>
-        ) : null}
-        <button
-          className="icon-btn"
-          onClick={() => setFullscreen((value) => !value)}
-          title={fullscreen ? 'Свернуть' : 'На весь экран'}
-        >
-          {fullscreen ? <Minimize2 size={19} /> : <Maximize2 size={19} />}
-        </button>
-      </div>
+        </div>
+      ) : null}
 
       <div
         className={cx('voice-grid', `columns-${columns}`, hasScreen && 'has-screen')}
@@ -303,6 +309,7 @@ export default function VoiceStage() {
               localStream={participant.isSelf ? voiceManager.localStream : null}
               compact={participants.length > 4}
               onFullscreen={setStreamFullscreen}
+              fullscreen={fullscreen}
             />
           );
         })}
@@ -413,7 +420,11 @@ export default function VoiceStage() {
     <>
       {content}
       {focused && focused.screen && focusedStream ? (
-        <div className="voice-stream-fullscreen">
+        <div
+          className="voice-stream-fullscreen"
+          onClick={() => setStreamFullscreen(null)}
+          title="Нажмите, чтобы свернуть трансляцию"
+        >
           <VideoStream stream={focusedStream} className="voice-stream-fullscreen-video" />
           {!focused.isSelf ? (
             <StreamVolumeControl className="fullscreen" />
