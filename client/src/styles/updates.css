@@ -14,6 +14,9 @@
     radial-gradient(120% 90% at 100% 0%, rgba(224, 71, 210, 0.16), transparent 55%),
     radial-gradient(90% 80% at 0% 100%, rgba(124, 58, 237, 0.14), transparent 60%),
     var(--bg-4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .update-hero {
