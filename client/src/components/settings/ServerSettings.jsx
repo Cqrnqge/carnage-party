@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Info, Loader2, Monitor, RefreshCw, Server, Smartphone } from 'lucide-react';
+import { Info, Loader2, RefreshCw, Server, Smartphone } from 'lucide-react';
 import { setServerBase } from '../../api';
 import { useApp } from '../../store';
 import { FormField } from '../ui/Modal';
@@ -121,9 +121,7 @@ export default function ServerSettings({ onDone }) {
     );
   }
 
-  const currentLabel = info?.mode === 'local'
-    ? 'локальный сервер (только этот ПК)'
-    : info?.current || 'подключение…';
+  const currentLabel = info?.current || 'подключение…';
 
   const connect = async () => {
     const value = url.trim();
@@ -146,23 +144,6 @@ export default function ServerSettings({ onDone }) {
       }
     } catch (err) {
       toast(`Ошибка подключения: ${err.message}`, 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const useLocal = async () => {
-    setBusy(true);
-    try {
-      const result = await window.desktop.setServer({ mode: 'local' });
-      if (!result?.ok) {
-        toast(result?.error || 'Не удалось запустить локальный сервер', 'error');
-        return;
-      }
-      toast('Локальный сервер запущен', 'success');
-      onDone?.();
-    } catch (err) {
-      toast(`Ошибка: ${err.message}`, 'error');
     } finally {
       setBusy(false);
     }
@@ -199,18 +180,14 @@ export default function ServerSettings({ onDone }) {
           {busy ? <Loader2 size={15} className="spin" /> : <Server size={15} />}
           Подключиться
         </button>
-        <button type="button" className="btn btn-secondary" onClick={useLocal} disabled={busy}>
-          <Monitor size={15} />
-          Локальный сервер
-        </button>
       </div>
 
       <div className="settings-note">
         <Info size={16} />
         <span>
-          По умолчанию: {info?.defaultUrl || '—'}. Если сервер переехал на другой IP, введите новый адрес
-          и нажмите «Подключиться». Для голоса и экрана по <b>http://</b> нужен Electron-клиент —
-          в браузере требуется HTTPS.
+          По умолчанию: {info?.defaultUrl || '—'}. Приложение не запускает локальный сервер:
+          если сервер выключен, появится экран «Сервер выключен или недоступен». Для голоса
+          и экрана по <b>http://</b> нужен Electron-клиент — в браузере требуется HTTPS.
         </span>
       </div>
     </div>

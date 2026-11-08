@@ -138,8 +138,8 @@
       </div>
     </div>
 
-    <h1>Сервер недоступен</h1>
-    <p class="lead">Не удалось открыть сервер Carnage Party. Проверьте, что он запущен, и укажите правильный адрес.</p>
+    <h1>Сервер выключен или недоступен</h1>
+    <p class="lead">Сервер Carnage Party не отвечает. Запустите его на компьютере-сервере или укажите другой адрес.</p>
 
     <div class="failed" id="failed" hidden>
       <b>Адрес:</b> <span id="failedUrl"></span><br />
@@ -153,7 +153,6 @@
     <div class="actions">
       <button class="primary" id="connect" type="button">Подключиться</button>
       <button class="secondary" id="retry" type="button">Повторить</button>
-      <button class="ghost" id="local" type="button">Локальный сервер</button>
     </div>
 
     <div class="status" id="status"></div>
@@ -176,7 +175,6 @@
       const failedBox = document.getElementById('failed');
       const connectBtn = document.getElementById('connect');
       const retryBtn = document.getElementById('retry');
-      const localBtn = document.getElementById('local');
       const desktop = window.desktop;
 
       if (failedUrl) {
@@ -194,7 +192,6 @@
       function setBusy(busy) {
         connectBtn.disabled = busy;
         retryBtn.disabled = busy;
-        localBtn.disabled = busy;
       }
 
       async function loadConfig() {
@@ -258,27 +255,8 @@
         }
       }
 
-      async function useLocal() {
-        if (!desktop?.setServer) return;
-        setBusy(true);
-        setStatus('Запускаю локальный сервер на этом ПК…');
-        try {
-          const result = await desktop.setServer({ mode: 'local' });
-          if (!result?.ok) {
-            setStatus(result?.error || 'Не удалось запустить локальный сервер.', 'error');
-            setBusy(false);
-          } else {
-            setStatus('Локальный сервер запущен. Загружаю…', 'ok');
-          }
-        } catch (err) {
-          setStatus('Ошибка: ' + err.message, 'error');
-          setBusy(false);
-        }
-      }
-
       connectBtn.addEventListener('click', connect);
       retryBtn.addEventListener('click', retry);
-      localBtn.addEventListener('click', useLocal);
       urlInput.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') connect();
       });

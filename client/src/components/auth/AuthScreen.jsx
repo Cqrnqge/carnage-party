@@ -304,7 +304,7 @@ export default function AuthScreen() {
           )}
 
           <div className="auth-footer">
-            <span>Carnage Party · локальный мессенджер</span>
+            <span>Carnage Party · мессенджер</span>
             <div className="auth-footer-right">
               {window.desktop?.getServerConfig || isAndroidApp() ? (
                 <button
@@ -323,9 +323,7 @@ export default function AuthScreen() {
                   <span>
                     {isAndroidApp()
                       ? nativeServer || 'Сервер'
-                      : serverInfo?.mode === 'local'
-                        ? 'Локальный сервер'
-                        : serverInfo?.current || 'Сервер'}
+                      : serverInfo?.current || 'Сервер'}
                   </span>
                 </button>
               ) : null}

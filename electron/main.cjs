@@ -16,6 +16,10 @@ const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 const externalServer = process.env.CARNAGE_EXTERNAL_SERVER === '1';
 const basePort = Number(process.env.CARNAGE_PORT || 32456);
 const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_DIR);
+// В собранной версии приложение всегда работает с внешним сервером и не
+// поднимает собственный локальный сервер. Локальный сервер остаётся только
+// для запуска из исходников (npm start / start.bat).
+const packagedApp = app.isPackaged;
 const DEFAULT_SERVER_FALLBACK = 'http://188.234.161.207:3001';
 
 // Версия приложения доступна preload-скрипту без IPC. Это важно, когда
@@ -65,7 +69,8 @@ function serverConfigPath() {
 function readServerConfig() {
   try {
     const parsed = JSON.parse(fs.readFileSync(serverConfigPath(), 'utf8'));
-    if (parsed?.mode === 'local') return { mode: 'local' };
+    // Старый режим "local" больше не используется: собранное приложение
+    // подключается только к внешнему серверу.
     if (parsed?.mode === 'remote' && parsed.url) {
       return { mode: 'remote', url: normalizeServerUrl(parsed.url) };
     }
@@ -111,14 +116,18 @@ const explicitServer = normalizeServerUrl(
 const bundledServer = readBundledServer();
 const savedServerConfig = readServerConfig();
 
-// Приоритет: параметр запуска → настройки в приложении → адрес по умолчанию
-// (только portable) → server.txt для запуска из исходников → локальный сервер.
+// Приоритет: параметр запуска → сохранённый внешний адрес → адрес,
+// зашитый в сборку (установленная, portable и Android) → server.txt для
+// запуска из исходников → локальный сервер только в режиме разработки.
 let remoteServerUrl = explicitServer;
-if (!remoteServerUrl && savedServerConfig) {
-  if (savedServerConfig.mode === 'remote') remoteServerUrl = savedServerConfig.url;
-} else if (!remoteServerUrl && !savedServerConfig) {
-  if (isPortable && bundledServer) remoteServerUrl = bundledServer;
-  else if (!isPortable) remoteServerUrl = normalizeServerUrl(readServerFile());
+if (!remoteServerUrl && savedServerConfig?.mode === 'remote') {
+  remoteServerUrl = savedServerConfig.url;
+}
+if (!remoteServerUrl && (packagedApp || isPortable) && bundledServer) {
+  remoteServerUrl = bundledServer;
+}
+if (!remoteServerUrl && !isPortable && !packagedApp) {
+  remoteServerUrl = normalizeServerUrl(readServerFile());
 }
 
 // Chromium не даёт камеру/микрофон/экран на http://LAN-IP.
@@ -158,6 +167,9 @@ if (!gotLock) {
   app.setAppUserModelId('ru.carnageparty.messenger');
 
   async function ensureServer(force = false) {
+    // Собранная версия (установленная и portable) всегда подключается к
+    // внешнему серверу и никогда не поднимает локальный.
+    if (packagedApp) return;
     if (!force && (externalServer || remoteServerUrl)) return;
     if (serverHandle) return;
     const dataDir = path.join(app.getPath('userData'), 'data');
@@ -432,18 +444,8 @@ if (!gotLock) {
       if (isDev || externalServer) {
         return { ok: false, error: 'В режиме разработки адрес сервера задаётся при запуске.' };
       }
-      const mode = payload?.mode === 'local' ? 'local' : 'remote';
-      if (mode === 'local') {
-        writeServerConfig({ mode: 'local' });
-        remoteServerUrl = '';
-        try {
-          await ensureServer(true);
-          if (!serverHandle) throw new Error('Не удалось запустить локальный сервер');
-          await mainWindow?.loadURL(serverHandle.url);
-          return { ok: true, mode: 'local', url: serverHandle.url, restarted: false };
-        } catch (err) {
-          return { ok: false, error: err.message };
-        }
+      if (payload?.mode === 'local') {
+        return { ok: false, error: 'Локальный сервер отключён. Укажите адрес внешнего сервера.' };
       }
 
       const url = normalizeServerUrl(payload?.url);
