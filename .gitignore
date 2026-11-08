@@ -21,8 +21,12 @@ server.txt
 # signing key
 mobile/keystore/
 
-# local previews
+# local previews and test screenshots
 client/public/__mobile-preview.html
+client/public/__mobile-test.html
+/voice-*.png
+/*.log
+/*.pid
 
 # OS/editor
 .DS_Store
