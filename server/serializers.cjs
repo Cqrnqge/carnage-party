@@ -132,6 +132,7 @@ function makeSerializers(db) {
       url: file.url,
       duration: Number(file.duration) || 0,
       kind: file.kind || null,
+      waveform: Array.isArray(file.waveform) ? file.waveform : [],
     };
   }
 

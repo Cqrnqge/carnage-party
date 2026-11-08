@@ -28,6 +28,7 @@ import Avatar from '../ui/Avatar';
 import RichText from '../ui/RichText';
 import ContextMenu from '../ui/ContextMenu';
 import EmojiPicker from './EmojiPicker';
+import { decodeWaveform, fitWaveform, WAVEFORM_BARS } from '../../waveform';
 
 function formatDuration(seconds) {
   const value = Math.max(0, Math.round(Number(seconds) || 0));
@@ -41,17 +42,43 @@ function VoiceAttachment({ attachment }) {
   const [progress, setProgress] = useState(0);
   const [total, setTotal] = useState(Number(attachment.duration) || 0);
 
-  const bars = useMemo(() => {
-    const seed = String(attachment.id || attachment.name || 'voice');
-    let hash = 0;
-    for (let index = 0; index < seed.length; index += 1) {
-      hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
+  const storedWaveform = useMemo(() => {
+    if (!Array.isArray(attachment.waveform)) return null;
+    const values = fitWaveform(attachment.waveform.slice(0, 96), WAVEFORM_BARS);
+    return values.length ? values : null;
+  }, [attachment.waveform]);
+
+  const [bars, setBars] = useState(storedWaveform);
+
+  // Нет сохранённой волны — декодируем сам аудиофайл.
+  useEffect(() => {
+    if (storedWaveform) {
+      setBars(storedWaveform);
+      return undefined;
     }
-    return Array.from({ length: 34 }, (_, index) => {
-      const value = 7 + ((hash >> (index % 24)) & 15);
-      return Math.min(27, value);
+    let cancelled = false;
+    setBars(null);
+    decodeWaveform(assetUrl(attachment.url), WAVEFORM_BARS).then((values) => {
+      if (!cancelled && values?.length) setBars(values);
     });
-  }, [attachment.id, attachment.name]);
+    return () => { cancelled = true; };
+  }, [attachment.url, storedWaveform]);
+
+  useEffect(() => {
+    if (!playing) return undefined;
+    let frame = 0;
+    const tick = () => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      const value = total || audio.duration || 0;
+      setProgress(value ? Math.min(1, audio.currentTime / value) : 0);
+      if (!audio.paused && !audio.ended) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [playing, total]);
+
+  const wave = bars?.length ? bars : new Array(WAVEFORM_BARS).fill(0.06);
 
   const toggle = () => {
     const audio = audioRef.current;
@@ -74,11 +101,11 @@ function VoiceAttachment({ attachment }) {
       </button>
       <div className="voice-message-main">
         <div className="voice-message-wave" aria-hidden="true">
-          {bars.map((height, index) => (
+          {wave.map((value, index) => (
             <span
               key={index}
-              className={cx('voice-message-bar', progress > index / bars.length && 'played')}
-              style={{ height: `${height}px` }}
+              className={cx('voice-message-bar', progress >= (index + 0.5) / wave.length && 'played')}
+              style={{ height: `${Math.round(4 + Math.min(1, Math.max(0, value)) * 24)}px` }}
             />
           ))}
         </div>

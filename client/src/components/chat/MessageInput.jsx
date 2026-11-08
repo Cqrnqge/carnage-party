@@ -6,6 +6,7 @@ import { hasPermission } from '../../constants';
 import { cx, formatBytes, isImage } from '../../utils';
 import { getSocket } from '../../socket';
 import { requestMic } from '../../voice';
+import { downsampleLevels, MAX_LEVEL_BARS, WAVEFORM_BARS } from '../../waveform';
 import EmojiPicker from './EmojiPicker';
 
 const DRAFT_PREFIX = 'carnage_draft';
@@ -44,8 +45,14 @@ export default function MessageInput({ channel, server }) {
   const recordTimer = useRef(null);
   const recordCancelled = useRef(false);
   const recordStartedAt = useRef(0);
+  const analysisContext = useRef(null);
+  const analysisSource = useRef(null);
+  const analysisNode = useRef(null);
+  const analysisTimer = useRef(null);
+  const waveSamples = useRef([]);
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
+  const [recordWave, setRecordWave] = useState(() => new Array(WAVEFORM_BARS).fill(0));
 
   const canSend = channel?.type === 'dm' || !server || hasPermission(server, user?.id, 'SEND_MESSAGES');
   const canAttach = channel?.type === 'dm' || !server || hasPermission(server, user?.id, 'ATTACH_FILES');
@@ -235,13 +242,77 @@ export default function MessageInput({ channel, server }) {
     }
   };
 
-  const sendVoice = async (blob, duration) => {
+  const stopAnalysis = () => {
+    if (analysisTimer.current) {
+      clearInterval(analysisTimer.current);
+      analysisTimer.current = null;
+    }
+    if (analysisSource.current) {
+      try { analysisSource.current.disconnect(); } catch {}
+      analysisSource.current = null;
+    }
+    analysisNode.current = null;
+    const context = analysisContext.current;
+    analysisContext.current = null;
+    if (context) context.close().catch(() => {});
+  };
+
+  // Слушает микрофон и собирает реальные уровни громкости для волны.
+  const startAnalysis = async (stream) => {
+    stopAnalysis();
+    waveSamples.current = [];
+    setRecordWave(new Array(WAVEFORM_BARS).fill(0));
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx || !stream) return;
+    try {
+      const context = new Ctx();
+      analysisContext.current = context;
+      if (context.state === 'suspended') {
+        context.resume().catch(() => {});
+      }
+      const source = context.createMediaStreamSource(stream);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.45;
+      source.connect(analyser);
+      analysisSource.current = source;
+      analysisNode.current = analyser;
+      const buffer = new Float32Array(analyser.fftSize);
+      analysisTimer.current = setInterval(() => {
+        const node = analysisNode.current;
+        if (!node) return;
+        node.getFloatTimeDomainData(buffer);
+        let sum = 0;
+        for (let index = 0; index < buffer.length; index += 1) {
+          sum += buffer[index] * buffer[index];
+        }
+        const rms = Math.sqrt(sum / buffer.length);
+        // Децибельная шкала: громкая речь не упирается в потолок, тихая остаётся видимой.
+        const db = 20 * Math.log10(Math.max(rms, 0.0005));
+        const level = Math.min(1, Math.max(0, (db + 56) / 42));
+        waveSamples.current.push(level);
+        if (waveSamples.current.length > MAX_LEVEL_BARS) waveSamples.current.shift();
+        setRecordWave((previous) => {
+          const next = previous.slice(-(WAVEFORM_BARS - 1));
+          next.push(level);
+          while (next.length < WAVEFORM_BARS) next.unshift(0);
+          return next;
+        });
+      }, 90);
+    } catch (err) {
+      console.warn('[voice] microphone analysis failed', err);
+      stopAnalysis();
+    }
+  };
+
+  const sendVoice = async (blob, duration, waveform) => {
     setSending(true);
     try {
       const activeReply = useApp.getState().replyTo;
       const form = new FormData();
       form.append('voice', '1');
       form.append('duration', String(Math.max(1, Math.round(duration))));
+      if (waveform?.length) form.append('waveform', JSON.stringify(waveform));
       const type = blob.type || 'audio/webm';
       const ext = type.includes('ogg') ? 'ogg' : type.includes('mp4') ? 'm4a' : 'webm';
       form.append('files', blob, `voice-${Date.now()}.${ext}`);
@@ -265,6 +336,7 @@ export default function MessageInput({ channel, server }) {
     try {
       const stream = await requestMic(inputDevice || 'default');
       streamRef.current = stream;
+      await startAnalysis(stream);
       const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
       const mimeType = candidates.find((type) => window.MediaRecorder.isTypeSupported?.(type)) || '';
       const options = { audioBitsPerSecond: 128000 };
@@ -280,6 +352,10 @@ export default function MessageInput({ channel, server }) {
       };
       recorder.onstop = () => {
         const duration = (Date.now() - recordStartedAt.current) / 1000;
+        const waveform = downsampleLevels(waveSamples.current);
+        waveSamples.current = [];
+        stopAnalysis();
+        setRecordWave(new Array(WAVEFORM_BARS).fill(0));
         const chunks = recordChunks.current;
         recordChunks.current = [];
         if (recordTimer.current) {
@@ -295,7 +371,7 @@ export default function MessageInput({ channel, server }) {
           return;
         }
         const blob = new Blob(chunks, { type: recorder.mimeType || chunks[0]?.type || 'audio/webm' });
-        sendVoice(blob, duration);
+        sendVoice(blob, duration, waveform);
       };
       recorder.start(1000);
       setRecording(true);
@@ -308,6 +384,9 @@ export default function MessageInput({ channel, server }) {
         }
       }, 250);
     } catch {
+      stopAnalysis();
+      waveSamples.current = [];
+      setRecordWave(new Array(WAVEFORM_BARS).fill(0));
       stopStream();
       toast('Не удалось получить доступ к микрофону', 'error');
     }
@@ -332,6 +411,9 @@ export default function MessageInput({ channel, server }) {
     } else {
       stopStream();
     }
+    stopAnalysis();
+    waveSamples.current = [];
+    setRecordWave(new Array(WAVEFORM_BARS).fill(0));
     setRecording(false);
     setRecordSeconds(0);
   };
@@ -343,6 +425,8 @@ export default function MessageInput({ channel, server }) {
     if (recorder && recorder.state !== 'inactive') {
       try { recorder.stop(); } catch {}
     }
+    stopAnalysis();
+    waveSamples.current = [];
     stopStream();
   }, []);
 
@@ -483,8 +567,14 @@ export default function MessageInput({ channel, server }) {
           <span className="voice-recording-label">Запись</span>
           <span className="voice-recording-time">{formatRecordTime(recordSeconds)}</span>
           <div className="voice-recording-wave" aria-hidden="true">
-            {Array.from({ length: 30 }).map((_, index) => (
-              <span key={index} style={{ animationDelay: `${(index % 9) * 0.08}s` }} />
+            {recordWave.map((level, index) => (
+              <span
+                key={index}
+                style={{
+                  height: `${Math.round(4 + Math.min(1, Math.max(0, level)) * 20)}px`,
+                  opacity: 0.55 + Math.min(1, Math.max(0, level)) * 0.45,
+                }}
+              />
             ))}
           </div>
           <button className="icon-btn danger" onClick={cancelRecording} title="Отменить запись" type="button">

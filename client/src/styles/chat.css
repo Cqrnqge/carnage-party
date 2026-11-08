@@ -1576,7 +1576,8 @@ button.forwarded-label:hover b {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: min(360px, 100%);
+  width: 360px;
+  max-width: 100%;
   padding: 8px 13px 8px 9px;
   border-radius: 15px;
   background: var(--bg-2);
@@ -1621,12 +1622,15 @@ button.forwarded-label:hover b {
   display: flex;
   align-items: center;
   gap: 2px;
-  height: 27px;
+  height: 30px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .voice-message-bar {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 1px;
+  max-width: 3px;
   border-radius: 2px;
   background: var(--bg-6);
   transition: background 0.12s ease;
@@ -1693,23 +1697,20 @@ button.forwarded-label:hover b {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   height: 26px;
   min-width: 0;
   overflow: hidden;
 }
 
 .voice-recording-wave span {
-  width: 3px;
-  height: 7px;
+  flex: 1 1 0;
+  min-width: 1px;
+  max-width: 3px;
+  height: 4px;
   border-radius: 2px;
   background: linear-gradient(180deg, #ff5c8a, #b45cff);
-  animation: voice-rec-bar 0.9s ease-in-out infinite alternate;
-}
-
-@keyframes voice-rec-bar {
-  from { height: 7px; opacity: 0.55; }
-  to { height: 24px; opacity: 1; }
+  transition: height 0.08s linear, opacity 0.08s linear;
 }
 
 .icon-btn.danger {

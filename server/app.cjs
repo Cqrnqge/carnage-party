@@ -434,16 +434,37 @@ function startServer(options = {}) {
     return name;
   }
 
+  function parseWaveform(value) {
+    if (value === undefined || value === null || value === '') return [];
+    try {
+      const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .slice(0, 96)
+        .map((item) => Number(item))
+        .filter((item) => Number.isFinite(item))
+        .map((item) => Math.round(Math.min(1, Math.max(0, item)) * 1000) / 1000);
+    } catch {
+      return [];
+    }
+  }
+
   function fileList(files, options = {}) {
-    return (files || []).map((file) => ({
-      id: makeId('att'),
-      name: decodeFilename(file.originalname),
-      size: file.size,
-      mime: file.mimetype || 'application/octet-stream',
-      url: `/uploads/${file.filename}`,
-      duration: options.kind === 'voice' ? Math.max(0, Math.round(Number(options.duration) || 0)) : 0,
-      kind: options.kind || null,
-    }));
+    const voice = options.kind === 'voice';
+    const waveform = voice ? parseWaveform(options.waveform) : [];
+    return (files || []).map((file) => {
+      const attachment = {
+        id: makeId('att'),
+        name: decodeFilename(file.originalname),
+        size: file.size,
+        mime: file.mimetype || 'application/octet-stream',
+        url: `/uploads/${file.filename}`,
+        duration: voice ? Math.max(0, Math.round(Number(options.duration) || 0)) : 0,
+        kind: options.kind || null,
+      };
+      if (voice) attachment.waveform = waveform;
+      return attachment;
+    });
   }
 
   function cleanupAttachments(message) {
@@ -1350,6 +1371,7 @@ function startServer(options = {}) {
       const attachments = fileList(req.files, {
         kind: voice ? 'voice' : null,
         duration: req.body.duration,
+        waveform: req.body.waveform,
       });
       if (!content && !attachments.length) return fail(res, 'Сообщение не может быть пустым');
       let replyToId = null;
