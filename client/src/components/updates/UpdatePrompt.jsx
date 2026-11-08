@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, CheckCircle2, Download, Loader2, Sparkles } from 'lucide-react';
 import Modal from '../ui/Modal';
 import { checkForUpdate, formatSize, platformLabel } from '../../updates';
+import { useUpdateInstaller } from './useUpdateInstaller';
 
 const CHECK_DELAY = 2000;
 
@@ -16,11 +17,16 @@ const HINTS = {
 
 export default function UpdatePrompt() {
   const [update, setUpdate] = useState(null);
-  const [phase, setPhase] = useState('idle');
-  const [progress, setProgress] = useState({ percent: 0, received: 0, total: 0 });
-  const [message, setMessage] = useState('');
-  const downloadedPath = useRef('');
   const mounted = useRef(true);
+  const {
+    phase,
+    progress,
+    message,
+    reset,
+    startDownload,
+    install,
+    busy,
+  } = useUpdateInstaller();
 
   useEffect(() => {
     mounted.current = true;
@@ -34,128 +40,12 @@ export default function UpdatePrompt() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!update) return undefined;
-
-    if (window.desktop?.onUpdateProgress) {
-      return window.desktop.onUpdateProgress((payload = {}) => {
-        setProgress({
-          percent: Number(payload.percent) || 0,
-          received: Number(payload.received) || 0,
-          total: Number(payload.total) || 0,
-        });
-      });
-    }
-
-    const onNative = (event) => {
-      const detail = event?.detail || {};
-      const phaseName = String(detail.phase || '');
-      if (phaseName === 'error') {
-        setPhase('error');
-        setMessage('Не удалось скачать APK. Проверьте соединение и повторите.');
-        return;
-      }
-      setProgress({
-        percent: Number(detail.percent) || 0,
-        received: Number(detail.received) || 0,
-        total: Number(detail.total) || 0,
-      });
-      if (phaseName === 'downloaded' || Number(detail.percent) >= 100) {
-        setPhase('done');
-        setMessage('Установка открыта. Подтвердите её на телефоне.');
-      }
-    };
-
-    window.addEventListener('carnage:update-progress', onNative);
-    return () => window.removeEventListener('carnage:update-progress', onNative);
-  }, [update]);
-
   if (!update) return null;
-
-  const busy = phase === 'downloading' || phase === 'installing';
 
   const close = () => {
     if (busy) return;
     setUpdate(null);
-    setPhase('idle');
-    setProgress({ percent: 0, received: 0, total: 0 });
-    setMessage('');
-    downloadedPath.current = '';
-  };
-
-  const startDownload = async () => {
-    setPhase('downloading');
-    setMessage('');
-    setProgress({ percent: 0, received: 0, total: update.size });
-    const fileName = update.fileName || 'carnage-update';
-
-    // Android: качаем нативно и сразу открываем установщик APK.
-    if (update.platform === 'android' && window.CarnageAndroid?.downloadUpdate) {
-      try {
-        window.CarnageAndroid.downloadUpdate(update.url, fileName);
-      } catch {
-        setPhase('error');
-        setMessage('Не удалось запустить загрузку APK.');
-      }
-      return;
-    }
-
-    // Windows и portable: качаем в Electron с прогрессом.
-    if (window.desktop?.downloadUpdate) {
-      try {
-        const result = await window.desktop.downloadUpdate({
-          url: update.url,
-          fileName,
-        });
-        if (!mounted.current) return;
-        if (!result?.ok) {
-          setPhase('error');
-          setMessage(result?.error || 'Не удалось скачать обновление.');
-          return;
-        }
-        downloadedPath.current = result.path;
-        setProgress((current) => ({ ...current, percent: 100, received: result.size || current.received }));
-        setPhase('ready');
-      } catch (err) {
-        setPhase('error');
-        setMessage(err.message || 'Не удалось скачать обновление.');
-      }
-      return;
-    }
-
-    // Браузер: просто открываем ссылку.
-    window.open(update.url, '_blank', 'noopener');
-    setPhase('done');
-    setMessage('Загрузка открылась в браузере.');
-  };
-
-  const install = async () => {
-    if (update.platform === 'android') {
-      setPhase('done');
-      return;
-    }
-    if (!window.desktop?.installUpdate) {
-      setPhase('error');
-      setMessage('Установка доступна только в приложении Carnage Party.');
-      return;
-    }
-    setPhase('installing');
-    const result = await window.desktop.installUpdate({
-      mode: update.platform === 'portable' ? 'portable' : 'installed',
-      path: downloadedPath.current,
-    });
-    if (!mounted.current) return;
-    if (!result?.ok) {
-      setPhase('error');
-      setMessage(result?.error || 'Не удалось установить обновление.');
-      return;
-    }
-    setPhase('done');
-    setMessage(
-      update.platform === 'portable'
-        ? 'Файлы обновляются. Приложение перезапустится само.'
-        : 'Приложение закроется, запустится установщик, затем откроется новая версия.'
-    );
+    reset();
   };
 
   const size = formatSize(update.size);
@@ -264,21 +154,21 @@ export default function UpdatePrompt() {
         )}
 
         {phase === 'idle' ? (
-          <button type="button" className="btn btn-primary" onClick={startDownload}>
+          <button type="button" className="btn btn-primary" onClick={() => startDownload(update)}>
             <Download size={16} />
             Скачать обновление
           </button>
         ) : null}
 
         {phase === 'error' ? (
-          <button type="button" className="btn btn-primary" onClick={startDownload}>
+          <button type="button" className="btn btn-primary" onClick={() => startDownload(update)}>
             <Download size={16} />
             Повторить
           </button>
         ) : null}
 
         {phase === 'ready' ? (
-          <button type="button" className="btn btn-primary" onClick={install}>
+          <button type="button" className="btn btn-primary" onClick={() => install(update)}>
             <CheckCircle2 size={16} />
             {update.platform === 'portable' ? 'Обновить и перезапустить' : 'Установить и перезапустить'}
           </button>

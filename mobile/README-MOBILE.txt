@@ -3,7 +3,7 @@ CARNAGE PARTY — ANDROID APK
 
 Сборка
 ------
-Запустите build-mobile.bat в корне проекта.
+Запустите carnage.bat в корне проекта и выберите пункт 11.
 
 Скрипт:
 - найдёт переносную Java (H:\l2j\classic 1.0\ClassicServer\java)
@@ -11,12 +11,11 @@ CARNAGE PARTY — ANDROID APK
 - при первом запуске скачает Android Build-Tools 35 и Platform 35
   в mobile\.sdk (около 120 МБ);
 - соберёт и подпишет APK;
-- положит результат в release\Carnage-Party-Mobile-1.1.0.apk.
+- положит результат в release\Carnage-Party-Mobile-1.1.2.apk.
 
 Адрес сервера по умолчанию берётся из electron\default-server.txt
-(сейчас http://188.234.161.207:3001). Можно передать свой:
-
-  build-mobile.bat http://192.168.1.10:3001
+(сейчас http://188.234.161.207:3001). Для другого адреса задайте
+переменную CARNAGE_DEFAULT_SERVER перед сборкой.
 
 Смена сервера в приложении
 --------------------------

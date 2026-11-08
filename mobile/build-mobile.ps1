@@ -53,6 +53,17 @@ if (-not $Version) {
 $versionParts = $Version.Split('.')
 $versionCode = [int]$versionParts[0] * 10000 + [int]$versionParts[1] * 100 + [int]$versionParts[2]
 
+# Синхронизируем манифест с версией из package.json, чтобы versionCode
+# всегда увеличивался и Android предлагал обновление.
+$manifestPath = Join-Path $mobileDir 'AndroidManifest.xml'
+$manifest = Get-Content $manifestPath -Raw
+$manifest = [Regex]::Replace($manifest, 'android:versionCode="[^"]*"', "android:versionCode=`"$versionCode`"")
+$manifest = [Regex]::Replace($manifest, 'android:versionName="[^"]*"', "android:versionName=`"$Version`"")
+[IO.File]::WriteAllText($manifestPath, $manifest, (New-Object System.Text.UTF8Encoding($false)))
+
+if (-not $ServerUrl) {
+    $ServerUrl = [Environment]::GetEnvironmentVariable('CARNAGE_DEFAULT_SERVER')
+}
 if (-not $ServerUrl) {
     $defaultServerFile = Join-Path $root 'electron\default-server.txt'
     if (Test-Path $defaultServerFile) {

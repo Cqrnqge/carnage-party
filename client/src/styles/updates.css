@@ -208,6 +208,168 @@
   flex: 1;
 }
 
+.whats-new-modal .update-icon {
+  background: linear-gradient(135deg, var(--green), #18a999, var(--blue));
+  box-shadow: 0 12px 30px rgba(24, 169, 153, 0.28);
+}
+
+/* --------------------------------------------------------------------------
+   Раздел «Обновления» в настройках
+   -------------------------------------------------------------------------- */
+
+.update-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.update-settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+}
+
+.update-settings-version {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.update-settings-icon {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent-3), var(--accent), var(--accent-4));
+  box-shadow: 0 8px 20px rgba(224, 71, 210, 0.24);
+}
+
+.update-settings-version > div:not(.update-settings-icon) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.update-settings-version span {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.update-settings-version strong {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.update-settings-platform {
+  margin-left: auto;
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-2) !important;
+  font-size: 11px !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  white-space: nowrap;
+}
+
+.update-settings-card > .btn {
+  align-self: flex-start;
+}
+
+.update-settings-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.update-settings-status.ok {
+  color: var(--green);
+}
+
+.update-settings-status.error {
+  color: var(--red);
+}
+
+.update-settings-found {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.update-settings-found .update-versions {
+  margin-top: 6px;
+}
+
+.update-settings-changelog {
+  margin-top: 4px;
+}
+
+.update-settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.update-settings-changelog-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+}
+
+.update-settings-changelog-head h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.update-settings-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 7px;
+}
+
+.update-settings-list li {
+  position: relative;
+  padding-left: 17px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.update-settings-list li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 7px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-3), var(--accent-4));
+}
+
 @media (max-width: 540px) {
   .update-modal {
     width: min(92vw, 470px);
@@ -226,5 +388,18 @@
 
   .update-actions {
     flex-direction: column-reverse;
+  }
+
+  .update-settings-card {
+    padding: 14px;
+  }
+
+  .update-settings-platform {
+    display: none;
+  }
+
+  .update-settings-actions .btn {
+    flex: 1 1 100%;
+    justify-content: center;
   }
 }

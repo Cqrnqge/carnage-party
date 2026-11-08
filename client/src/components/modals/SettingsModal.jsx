@@ -12,6 +12,7 @@ import {
   MonitorSpeaker,
   Palette,
   Play,
+  RefreshCw,
   Server,
   Shield,
   Square,
@@ -25,6 +26,7 @@ import { cx, keyLabel, readImageFile } from '../../utils';
 import Avatar from '../ui/Avatar';
 import Modal, { FormField } from '../ui/Modal';
 import ServerSettings from '../settings/ServerSettings';
+import UpdateSettings from '../settings/UpdateSettings';
 import { voiceManager } from '../../voice';
 import { appVersion } from '../../version';
 
@@ -34,6 +36,7 @@ const TABS = [
   { id: 'notifications', label: 'Уведомления', icon: Bell },
   { id: 'voice', label: 'Голос и видео', icon: Mic },
   { id: 'network', label: 'Сервер', icon: Server },
+  { id: 'updates', label: 'Обновления', icon: RefreshCw },
   { id: 'account', label: 'Аккаунт', icon: Shield },
 ];
 
@@ -404,7 +407,8 @@ export default function SettingsModal({ tab: initialTab = 'profile' }) {
                 <div className="settings-label">Тема</div>
                 <div className="theme-options">
                   {[
-                    { id: 'dark', label: 'Carnage', colors: ['#241e30', '#0b0910'] },
+                    { id: 'dark', label: 'Чёрно-серая', colors: ['#242427', '#0a0a0b'] },
+                    { id: 'carnage', label: 'Carnage', colors: ['#241e30', '#0b0910'] },
                     { id: 'midnight', label: 'Полночь', colors: ['#1a1b2e', '#0f1019'] },
                     { id: 'crimson', label: 'Багровая', colors: ['#2a1420', '#160b10'] },
                   ].map((theme) => (
@@ -602,6 +606,16 @@ export default function SettingsModal({ tab: initialTab = 'profile' }) {
                 <p>К какому серверу подключается Carnage Party.</p>
               </div>
               <ServerSettings />
+            </>
+          ) : null}
+
+          {tab === 'updates' ? (
+            <>
+              <div className="settings-head">
+                <h2>Обновления</h2>
+                <p>Проверьте версию и установите новую, не выходя из приложения.</p>
+              </div>
+              <UpdateSettings />
             </>
           ) : null}
 

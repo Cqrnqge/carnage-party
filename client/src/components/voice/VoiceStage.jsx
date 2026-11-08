@@ -32,6 +32,44 @@ function VideoStream({ stream, className = '', muted = true }) {
   return <video ref={ref} autoPlay playsInline muted={muted} className={className} />;
 }
 
+// Отдельная громкость звука чужой трансляции: не влияет на голос
+// участников и запоминается между запусками.
+function StreamVolumeControl({ className = '' }) {
+  const volume = useApp((state) => state.settings.streamVolume ?? 100);
+  const muted = useApp((state) => state.settings.streamMuted);
+  const deafened = useApp((state) => state.voice.deafened);
+  const updateSettings = useApp((state) => state.updateSettings);
+  const silent = Boolean(muted || deafened);
+  return (
+    <div
+      className={cx('voice-stream-audio', className)}
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="voice-stream-audio-toggle"
+        onClick={() => updateSettings({ streamMuted: !muted })}
+        title={silent ? 'Включить звук трансляции' : 'Выключить звук трансляции'}
+        aria-label={silent ? 'Включить звук трансляции' : 'Выключить звук трансляции'}
+      >
+        {silent ? <VolumeX size={16} /> : <Volume2 size={16} />}
+      </button>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        step="1"
+        value={volume}
+        onChange={(event) => updateSettings({ streamVolume: Number(event.target.value) })}
+        title={`Громкость трансляции: ${volume}%`}
+        aria-label="Громкость трансляции"
+      />
+      <span>{silent ? 'выкл' : `${volume}%`}</span>
+    </div>
+  );
+}
+
 function ParticipantTile({ participant, stream, isSelf, localStream, compact, onFullscreen }) {
   const screen = Boolean(participant.screen) && stream;
   const camera = Boolean(participant.camera);
@@ -55,6 +93,7 @@ function ParticipantTile({ participant, stream, isSelf, localStream, compact, on
         >
           <Maximize2 size={17} />
         </button>
+        {!isSelf ? <StreamVolumeControl /> : null}
         <div className="voice-tile-label">
           <span className="voice-live-dot" />
           {participant.user?.displayName || 'Экран'} показывает экран
@@ -376,6 +415,9 @@ export default function VoiceStage() {
       {focused && focused.screen && focusedStream ? (
         <div className="voice-stream-fullscreen">
           <VideoStream stream={focusedStream} className="voice-stream-fullscreen-video" />
+          {!focused.isSelf ? (
+            <StreamVolumeControl className="fullscreen" />
+          ) : null}
           <div className="voice-stream-fullscreen-bar">
             <span className="voice-stream-fullscreen-title">
               <span className="voice-live-dot" />

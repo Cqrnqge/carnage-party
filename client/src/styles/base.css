@@ -3,17 +3,17 @@
    ========================================================================== */
 
 :root {
-  --bg-0: #0b0910;
-  --bg-1: #100d17;
-  --bg-2: #15111e;
-  --bg-3: #1b1627;
-  --bg-4: #1a1523;
-  --bg-5: #241e30;
-  --bg-6: #2f2740;
-  --text: #f6f1f9;
-  --text-2: #ddd4e5;
-  --muted: #9d92aa;
-  --muted-2: #726680;
+  --bg-0: #0a0a0b;
+  --bg-1: #101012;
+  --bg-2: #161618;
+  --bg-3: #1c1c1f;
+  --bg-4: #141416;
+  --bg-5: #242427;
+  --bg-6: #2f2f33;
+  --text: #f4f4f5;
+  --text-2: #d8d8dc;
+  --muted: #9b9ba3;
+  --muted-2: #707078;
   --accent: #e047d2;
   --accent-2: #a855f7;
   --accent-3: #ff3d71;
@@ -27,10 +27,10 @@
   --red: #f23f43;
   --red-soft: rgba(242, 63, 67, 0.14);
   --blue: #5865f2;
-  --border: rgba(255, 240, 255, 0.07);
-  --border-strong: rgba(255, 240, 255, 0.13);
-  --hover: rgba(255, 238, 255, 0.06);
-  --hover-strong: rgba(255, 238, 255, 0.11);
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.13);
+  --hover: rgba(255, 255, 255, 0.06);
+  --hover-strong: rgba(255, 255, 255, 0.11);
   --shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
   --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.35);
   --radius: 10px;
@@ -38,6 +38,25 @@
   --rail-width: 76px;
   --sidebar-width: 280px;
   --members-width: 250px;
+}
+
+/* Тема Carnage — прежняя тёмно-сливовая палитра. */
+.app.theme-carnage {
+  --bg-0: #0b0910;
+  --bg-1: #100d17;
+  --bg-2: #15111e;
+  --bg-3: #1b1627;
+  --bg-4: #1a1523;
+  --bg-5: #241e30;
+  --bg-6: #2f2740;
+  --text: #f6f1f9;
+  --text-2: #ddd4e5;
+  --muted: #9d92aa;
+  --muted-2: #726680;
+  --border: rgba(255, 240, 255, 0.07);
+  --border-strong: rgba(255, 240, 255, 0.13);
+  --hover: rgba(255, 238, 255, 0.06);
+  --hover-strong: rgba(255, 238, 255, 0.11);
 }
 
 .app.theme-midnight {

@@ -17,6 +17,8 @@ export const DEFAULT_SETTINGS = {
   videoDevice: 'default',
   inputVolume: 100,
   outputVolume: 100,
+  streamVolume: 100,
+  streamMuted: false,
   reduceMotion: false,
   pushToTalk: false,
   pttKey: 'KeyV',
@@ -54,6 +56,7 @@ const initialVoice = {
   ptt: false,
   participants: [],
   streams: {},
+  screenAudioStreams: {},
   selfSpeaking: false,
   error: null,
 };
@@ -563,10 +566,30 @@ export const useApp = create((set, get) => ({
 
   removeVoiceStream: (userId) => {
     const voice = get().voice;
-    if (!voice.streams[userId]) return;
+    if (!voice.streams[userId] && !voice.screenAudioStreams?.[userId]) return;
     const streams = { ...voice.streams };
+    const screenAudioStreams = { ...voice.screenAudioStreams };
     delete streams[userId];
-    set({ voice: { ...voice, streams } });
+    delete screenAudioStreams[userId];
+    set({ voice: { ...voice, streams, screenAudioStreams } });
+  },
+
+  setVoiceScreenAudioStream: (userId, stream) => {
+    const voice = get().voice;
+    set({
+      voice: {
+        ...voice,
+        screenAudioStreams: { ...voice.screenAudioStreams, [userId]: stream },
+      },
+    });
+  },
+
+  removeVoiceScreenAudioStream: (userId) => {
+    const voice = get().voice;
+    if (!voice.screenAudioStreams?.[userId]) return;
+    const screenAudioStreams = { ...voice.screenAudioStreams };
+    delete screenAudioStreams[userId];
+    set({ voice: { ...voice, screenAudioStreams } });
   },
 
   handleVoiceState: ({ channelId, participants }) => {
@@ -586,7 +609,11 @@ export const useApp = create((set, get) => ({
       for (const key of streamKeys) {
         if (remote.some((p) => p.userId === key)) streams[key] = voice.streams[key];
       }
-      voice = { ...voice, participants: remote, streams };
+      const screenAudioStreams = {};
+      for (const [key, value] of Object.entries(voice.screenAudioStreams || {})) {
+        if (remote.some((p) => p.userId === key)) screenAudioStreams[key] = value;
+      }
+      voice = { ...voice, participants: remote, streams, screenAudioStreams };
     }
     set({ voiceStates, voice, incomingCall });
   },

@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, session, shell, ipcMain, desktopCapturer, Notification } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, session, shell, ipcMain, desktopCapturer, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { setupPtt } = require('./ptt.cjs');
@@ -18,7 +18,7 @@ const basePort = Number(process.env.CARNAGE_PORT || 32456);
 const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_DIR);
 // В собранной версии приложение всегда работает с внешним сервером и не
 // поднимает собственный локальный сервер. Локальный сервер остаётся только
-// для запуска из исходников (npm start / start.bat).
+// для запуска из исходников (npm start / carnage.bat, пункт 2).
 const packagedApp = app.isPackaged;
 const DEFAULT_SERVER_FALLBACK = 'http://188.234.161.207:3001';
 
@@ -149,7 +149,8 @@ try {
 
 let mainWindow = null;
 let serverHandle = null;
-let quitting = false;
+let tray = null;
+let isQuitting = false;
 // Источник экрана, выбранный пользователем в окне выбора монитора.
 let pendingScreenSourceId = null;
 
@@ -220,6 +221,18 @@ if (!gotLock) {
 
     mainWindow.once('ready-to-show', () => mainWindow.show());
 
+    // Крестик сворачивает приложение в трей, а не закрывает его.
+    // Выход — только через меню трея или штатное завершение приложения.
+    mainWindow.on('close', (event) => {
+      if (isQuitting || !packagedApp || !tray) return;
+      event.preventDefault();
+      mainWindow.hide();
+    });
+
+    mainWindow.on('closed', () => {
+      mainWindow = null;
+    });
+
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
       if (/^https?:\/\//i.test(url)) shell.openExternal(url);
       return { action: 'deny' };
@@ -270,6 +283,44 @@ if (!gotLock) {
     }
   }
 
+  function showMainWindow() {
+    if (!mainWindow) {
+      createWindow().catch((err) => console.error('[electron] Не удалось открыть окно:', err));
+      return;
+    }
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+  }
+
+  function createTray() {
+    if (tray || process.platform !== 'win32') return;
+    try {
+      let image = nativeImage.createFromPath(path.join(__dirname, 'tray.ico'));
+      if (image.isEmpty()) image = nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'icon.ico'));
+      if (image.isEmpty()) return;
+      tray = new Tray(image);
+      tray.setToolTip('Carnage Party');
+      tray.setContextMenu(
+        Menu.buildFromTemplate([
+          { label: 'Развернуть', click: () => showMainWindow() },
+          { type: 'separator' },
+          {
+            label: 'Закрыть',
+            click: () => {
+              isQuitting = true;
+              app.quit();
+            },
+          },
+        ])
+      );
+      tray.on('double-click', () => showMainWindow());
+      tray.on('click', () => showMainWindow());
+    } catch (err) {
+      console.warn('[electron] Трей недоступен:', err.message);
+    }
+  }
+
   app.whenReady().then(async () => {
     const allowedPermissions = new Set([
       'media',
@@ -311,7 +362,7 @@ if (!gotLock) {
     });
 
     try {
-      session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
+      session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
         try {
           const sources = await desktopCapturer.getSources({ types: ['screen'] });
           const selected = pendingScreenSourceId;
@@ -321,8 +372,15 @@ if (!gotLock) {
             sources.find((s) => String(s.id).startsWith('screen:')) ||
             sources[0];
           if (source) {
-            console.log('[electron] Демонстрация экрана:', source.name);
-            callback({ video: source });
+            console.log(
+              '[electron] Демонстрация экрана:',
+              source.name,
+              request?.audioRequested ? '(со звуком)' : ''
+            );
+            const response = { video: source };
+            // Звук компьютера (loopback) передаётся отдельной дорожкой.
+            if (request?.audioRequested) response.audio = 'loopback';
+            callback(response);
           } else {
             callback({});
           }
@@ -424,7 +482,10 @@ if (!gotLock) {
             : prepareInstalledUpdate({ installerPath: filePath, processId: process.pid });
 
         launchUpdaterScript(scriptPath);
-        setTimeout(() => app.quit(), 1200);
+        setTimeout(() => {
+          isQuitting = true;
+          app.quit();
+        }, 1200);
         return { ok: true, restarting: true };
       } catch (err) {
         return { ok: false, error: err.message || 'Не удалось установить обновление' };
@@ -525,6 +586,7 @@ if (!gotLock) {
     });
 
     await createWindow();
+    createTray();
 
     app.on('activate', async () => {
       if (BrowserWindow.getAllWindows().length === 0) await createWindow();
@@ -545,10 +607,12 @@ if (!gotLock) {
   });
 
   app.on('before-quit', (event) => {
-    if (quitting || !serverHandle) return;
+    isQuitting = true;
+    if (!serverHandle) return;
     event.preventDefault();
-    quitting = true;
-    serverHandle
+    const handle = serverHandle;
+    serverHandle = null;
+    handle
       .close()
       .catch(() => {})
       .finally(() => app.quit());

@@ -72,8 +72,11 @@ class VoiceManager {
     this.localStream = null;
     this.cameraStream = null;
     this.screenStream = null;
+    this.screenAudioStream = null;
     this.remoteStreams = new Map();
+    this.remoteTracks = new Map();
     this.videoSenders = new Map();
+    this.screenAudioSenders = new Map();
     this.iceQueues = new Map();
     this.channelId = null;
     this.joined = false;
@@ -140,6 +143,7 @@ class VoiceManager {
     for (const userId of [...this.pcs.keys()]) {
       if (!remoteIds.has(userId)) this.closePeer(userId);
     }
+    for (const userId of remoteIds) this.syncRemoteStreams(userId);
   };
 
   async join(channelId) {
@@ -184,7 +188,12 @@ class VoiceManager {
       for (const track of this.localStream.getAudioTracks()) track.enabled = false;
     }
 
-    const payload = { channelId, muted: this.muted, deafened: this.deafened };
+    const payload = {
+      channelId,
+      muted: this.muted,
+      deafened: this.deafened,
+      voiceStreamId: this.localStream?.id || '',
+    };
     this.socket.timeout(12000).emit('voice:join', payload, (err, res) => {
       if (this.channelId !== channelId) return;
       if (err || !res?.ok) {
@@ -232,14 +241,18 @@ class VoiceManager {
     for (const userId of [...this.pcs.keys()]) this.closePeer(userId);
     this.pcs.clear();
     this.videoSenders.clear();
+    this.screenAudioSenders.clear();
     this.iceQueues.clear();
     this.remoteStreams.clear();
+    this.remoteTracks.clear();
     this.stopStream(this.localStream);
     this.stopStream(this.cameraStream);
     this.stopStream(this.screenStream);
+    this.stopStream(this.screenAudioStream);
     this.localStream = null;
     this.cameraStream = null;
     this.screenStream = null;
+    this.screenAudioStream = null;
     this.screenTrackHandler = null;
     this.cameraOn = false;
     this.screenOn = false;
@@ -269,8 +282,10 @@ class VoiceManager {
     }
     this.pcs.delete(userId);
     this.videoSenders.delete(userId);
+    this.screenAudioSenders.delete(userId);
     this.iceQueues.delete(userId);
     this.remoteStreams.delete(userId);
+    this.remoteTracks.delete(userId);
     useApp.getState().removeVoiceStream(userId);
   }
 
@@ -297,15 +312,32 @@ class VoiceManager {
       } catch {}
     }
 
+    const screenAudioTrack = this.screenAudioStream?.getAudioTracks?.()[0];
+    if (screenAudioTrack && screenAudioTrack.readyState === 'live') {
+      try {
+        const sender = pc.addTrack(screenAudioTrack, this.screenAudioStream);
+        this.screenAudioSenders.set(userId, sender);
+      } catch {}
+    }
+
     pc.onicecandidate = (event) => {
       if (event.candidate) this.emitSignal(userId, { candidate: event.candidate });
     };
 
     pc.ontrack = (event) => {
-      const stream = this.remoteStreams.get(userId) || new MediaStream();
-      try { stream.addTrack(event.track); } catch {}
-      this.remoteStreams.set(userId, stream);
-      useApp.getState().setVoiceStream(userId, new MediaStream(stream.getTracks()));
+      const track = event.track;
+      const streamId = event.streams?.[0]?.id || '';
+      const entries = this.remoteTracks.get(userId) || [];
+      entries.push({ track, streamId });
+      this.remoteTracks.set(userId, entries);
+      track.addEventListener('ended', () => {
+        const list = this.remoteTracks.get(userId) || [];
+        const next = list.filter((entry) => entry.track !== track);
+        if (next.length) this.remoteTracks.set(userId, next);
+        else this.remoteTracks.delete(userId);
+        this.syncRemoteStreams(userId);
+      });
+      this.syncRemoteStreams(userId);
     };
 
     pc.onconnectionstatechange = () => {
@@ -321,6 +353,68 @@ class VoiceManager {
 
     if (initiator) this.makeOffer(userId, pc);
     return pc;
+  }
+
+  // Раскладывает входящие дорожки на голос и отдельный звук трансляции.
+  // Дорожка звука экрана приходит в своём MediaStream (screenAudioStreamId),
+  // поэтому её можно регулировать независимо от микрофона.
+  syncRemoteStreams(userId) {
+    const state = useApp.getState();
+    const participant =
+      (state.voiceStates?.[this.channelId] || []).find((item) => item.userId === userId) ||
+      (state.voice.participants || []).find((item) => item.userId === userId);
+    const screenAudioId = String(participant?.screenAudioStreamId || '');
+    const voiceStreamId = String(participant?.voiceStreamId || '');
+    const screenActive = Boolean(participant?.screen);
+    const entries = (this.remoteTracks.get(userId) || []).filter(
+      (entry) => entry.track.readyState !== 'ended'
+    );
+
+    const mainEntries = [];
+    const screenEntries = [];
+    for (const entry of entries) {
+      const isScreenAudio =
+        entry.track.kind === 'audio' &&
+        ((screenAudioId && entry.streamId === screenAudioId) ||
+          (screenActive &&
+            !screenAudioId &&
+            voiceStreamId &&
+            entry.streamId &&
+            entry.streamId !== voiceStreamId));
+      if (isScreenAudio) screenEntries.push(entry);
+      else mainEntries.push(entry);
+    }
+
+    const current = this.remoteStreams.get(userId);
+    const currentTracks = current?.getTracks() || [];
+    const sameMain =
+      current &&
+      currentTracks.length === mainEntries.length &&
+      mainEntries.every((entry) => currentTracks.includes(entry.track));
+    if (!sameMain) {
+      const stream = new MediaStream(mainEntries.map((entry) => entry.track));
+      this.remoteStreams.set(userId, stream);
+      useApp.getState().setVoiceStream(userId, new MediaStream(stream.getTracks()));
+    }
+
+    if (screenEntries.length) {
+      const currentScreen = state.voice.screenAudioStreams?.[userId];
+      const screenTracks = currentScreen?.getTracks() || [];
+      const sameScreen =
+        currentScreen &&
+        screenTracks.length === screenEntries.length &&
+        screenEntries.every((entry) => screenTracks.includes(entry.track));
+      if (!sameScreen) {
+        useApp
+          .getState()
+          .setVoiceScreenAudioStream(
+            userId,
+            new MediaStream(screenEntries.map((entry) => entry.track))
+          );
+      }
+    } else {
+      useApp.getState().removeVoiceScreenAudioStream(userId);
+    }
   }
 
   async makeOffer(userId, pc) {
@@ -406,23 +500,50 @@ class VoiceManager {
         } catch {}
       }
     }
-    if (needsRenegotiation) await this.renegotiateAll();
+    return needsRenegotiation;
+  }
+
+  // Добавляет звук трансляции в каждое соединение отдельной дорожкой.
+  attachScreenAudio() {
+    const track = this.screenAudioStream?.getAudioTracks?.()[0];
+    if (!track) return false;
+    let added = false;
+    for (const [userId, pc] of this.pcs.entries()) {
+      if (this.screenAudioSenders.has(userId)) continue;
+      try {
+        const sender = pc.addTrack(track, this.screenAudioStream);
+        this.screenAudioSenders.set(userId, sender);
+        added = true;
+      } catch {}
+    }
+    return added;
   }
 
   async stopVideo() {
     const hadVideo = this.cameraOn || this.screenOn;
+    const hadScreenAudio =
+      Boolean(this.screenAudioStream?.getAudioTracks?.().length) ||
+      this.screenAudioSenders.size > 0;
     this.cameraOn = false;
     this.screenOn = false;
     this.stopStream(this.cameraStream);
     this.stopStream(this.screenStream);
+    this.stopStream(this.screenAudioStream);
     this.cameraStream = null;
     this.screenStream = null;
+    this.screenAudioStream = null;
     this.screenTrackHandler = null;
     for (const sender of this.videoSenders.values()) {
       try { await sender.replaceTrack(null); } catch {}
     }
+    for (const [userId, sender] of this.screenAudioSenders.entries()) {
+      const pc = this.pcs.get(userId);
+      try { pc?.removeTrack(sender); } catch {}
+    }
+    this.screenAudioSenders.clear();
     useApp.getState().setVoice({ camera: false, screen: false });
-    if (hadVideo) this.emitUpdate();
+    if (hadVideo || hadScreenAudio) this.emitUpdate();
+    if (hadScreenAudio) await this.renegotiateAll();
   }
 
   async toggleCamera() {
@@ -441,7 +562,8 @@ class VoiceManager {
       this.cameraStream = stream;
       this.cameraOn = true;
       useApp.getState().setVoice({ camera: true, screen: false });
-      await this.applyVideoTrack(stream.getVideoTracks()[0], stream);
+      const needsRenegotiation = await this.applyVideoTrack(stream.getVideoTracks()[0], stream);
+      if (needsRenegotiation) await this.renegotiateAll();
       this.emitUpdate();
       playSound('cameraStart');
     } catch (err) {
@@ -478,9 +600,19 @@ class VoiceManager {
 
     await this.stopVideo();
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      // Запрашиваем звук вместе с экраном. В Electron это системный
+      // loopback (звук компьютера), в браузере — звук выбранной вкладки.
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      } catch (err) {
+        if (err.name === 'NotAllowedError' || err.name === 'AbortError') throw err;
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      }
       const track = stream.getVideoTracks()[0];
       if (!track) throw new Error('Источник экрана не выбран');
+      const audioTrack = stream.getAudioTracks()[0] || null;
+      this.screenAudioStream = audioTrack ? new MediaStream([audioTrack]) : null;
       this.screenTrackHandler = () => {
         if (this.screenOn) {
           playSound('screenStop');
@@ -490,9 +622,12 @@ class VoiceManager {
       track.addEventListener('ended', this.screenTrackHandler);
       this.screenStream = stream;
       this.screenOn = true;
+      const audioAdded = this.attachScreenAudio();
       useApp.getState().setVoice({ camera: false, screen: true });
-      await this.applyVideoTrack(track, stream);
+      // Сначала сообщаем зрителям id аудиопотока, затем пересобираем SDP.
       this.emitUpdate();
+      const needsVideo = await this.applyVideoTrack(track, stream);
+      if (needsVideo || audioAdded) await this.renegotiateAll();
       playSound('screenStart');
     } catch (err) {
       if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
@@ -507,6 +642,8 @@ class VoiceManager {
       deafened: this.deafened,
       camera: this.cameraOn,
       screen: this.screenOn,
+      voiceStreamId: this.localStream?.id || '',
+      screenAudioStreamId: this.screenAudioStream?.id || '',
     });
   }
 
@@ -662,6 +799,7 @@ class VoiceManager {
       if (track) track.enabled = !this.muted;
       this.startVAD();
       if (needsRenegotiation) await this.renegotiateAll();
+      this.emitUpdate();
       useApp.getState().toast('Микрофон переключён', 'success');
     } catch (err) {
       useApp.getState().toast(`Не удалось переключить микрофон: ${err.message}`, 'error');

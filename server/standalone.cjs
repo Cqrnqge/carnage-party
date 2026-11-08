@@ -41,7 +41,7 @@ startServer({ dataDir, port, host, serveClient: true })
       console.log('  Не забудьте разрешить Node.js в брандмауэре Windows.');
     } else {
       console.log('  Доступ только с этого компьютера.');
-      console.log('  Для локальной сети: set CARNAGE_HOST=0.0.0.0 или server-lan.bat');
+      console.log('  Для локальной сети: set CARNAGE_HOST=0.0.0.0 или carnage.bat, пункт 5');
     }
     if (process.env.CARNAGE_SEED_DEMO === '1') {
       console.log('  Демо-данные: CARNAGE_SEED_DEMO=1 (demo / demo1234)');

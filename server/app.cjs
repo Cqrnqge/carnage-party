@@ -395,6 +395,8 @@ function startServer(options = {}) {
         camera: Boolean(state.camera),
         screen: Boolean(state.screen),
         speaking: Boolean(state.speaking),
+        voiceStreamId: String(state.voiceStreamId || ''),
+        screenAudioStreamId: String(state.screenAudioStreamId || ''),
         joinedAt: state.joinedAt,
       });
     }
@@ -1701,6 +1703,8 @@ function startServer(options = {}) {
           camera: false,
           screen: false,
           speaking: false,
+          voiceStreamId: String(payload.voiceStreamId || '').slice(0, 128),
+          screenAudioStreamId: '',
           joinedAt: nowIso(),
         };
         map.set(userId, state);
@@ -1727,6 +1731,8 @@ function startServer(options = {}) {
               deafened: p.deafened,
               camera: p.camera,
               screen: p.screen,
+              voiceStreamId: p.voiceStreamId,
+              screenAudioStreamId: p.screenAudioStreamId,
             })),
           });
         }
@@ -1747,6 +1753,12 @@ function startServer(options = {}) {
       if (payload.deafened !== undefined) state.deafened = Boolean(payload.deafened);
       if (payload.camera !== undefined) state.camera = Boolean(payload.camera);
       if (payload.screen !== undefined) state.screen = Boolean(payload.screen);
+      if (payload.voiceStreamId !== undefined) {
+        state.voiceStreamId = String(payload.voiceStreamId || '').slice(0, 128);
+      }
+      if (payload.screenAudioStreamId !== undefined) {
+        state.screenAudioStreamId = String(payload.screenAudioStreamId || '').slice(0, 128);
+      }
       broadcastVoiceState(channelId);
     });
 

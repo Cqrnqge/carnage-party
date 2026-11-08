@@ -61,9 +61,34 @@ export async function clientPlatform() {
   return '';
 }
 
-export async function checkForUpdate({ timeout = 6000 } = {}) {
+function buildUpdate(platform, release, data, current) {
+  return {
+    platform,
+    current,
+    version: release.version,
+    url: serverUrl(release.url),
+    fileName: String(release.file || ''),
+    size: Number(release.size) || 0,
+    notes: Array.isArray(release.notes)
+      ? release.notes.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 20)
+      : [],
+    notesText: String(data.notes || '').slice(0, 4000),
+  };
+}
+
+// Подробная проверка обновлений для раздела настроек: отличает
+// «обновлений нет» от «сервер недоступен» и возвращает changelog.
+export async function fetchUpdateInfo({ timeout = 8000 } = {}) {
   const platform = await clientPlatform();
-  if (!platform) return null;
+  const current = appVersion();
+  if (!platform) {
+    return {
+      ok: false,
+      platform: '',
+      current,
+      error: 'Обновления доступны в приложении Carnage Party для Windows, portable и Android.',
+    };
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -72,29 +97,42 @@ export async function checkForUpdate({ timeout = 6000 } = {}) {
       cache: 'no-store',
       signal: controller.signal,
     });
-    if (!response.ok) return null;
+    if (!response.ok) throw new Error(`Сервер вернул ${response.status}`);
     const data = await response.json();
     const release = data?.releases?.[platform];
-    if (!release?.version || !release?.url) return null;
-
-    const current = appVersion();
-    if (compareVersions(release.version, current) <= 0) return null;
-
+    const changelog =
+      data?.changelog && typeof data.changelog === 'object' ? data.changelog : {};
+    const update =
+      release?.version &&
+      release?.url &&
+      compareVersions(release.version, current) > 0
+        ? buildUpdate(platform, release, data, current)
+        : null;
     return {
+      ok: true,
       platform,
       current,
-      version: release.version,
-      url: serverUrl(release.url),
-      fileName: String(release.file || ''),
-      size: Number(release.size) || 0,
-      notes: Array.isArray(release.notes)
-        ? release.notes.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 20)
-        : [],
-      notesText: String(data.notes || '').slice(0, 4000),
+      latest: String(release?.version || data?.latest || current),
+      update,
+      changelog,
+      notesText: String(data?.notes || '').slice(0, 4000),
     };
-  } catch {
-    return null;
+  } catch (err) {
+    return {
+      ok: false,
+      platform,
+      current,
+      error:
+        err?.name === 'AbortError'
+          ? 'Сервер не ответил. Попробуйте проверить обновления ещё раз.'
+          : 'Не удалось проверить обновления. Проверьте соединение с сервером.',
+    };
   } finally {
     clearTimeout(timer);
   }
+}
+
+export async function checkForUpdate({ timeout = 6000 } = {}) {
+  const info = await fetchUpdateInfo({ timeout });
+  return info.ok ? info.update : null;
 }

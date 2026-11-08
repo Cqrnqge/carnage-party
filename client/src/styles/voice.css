@@ -365,6 +365,60 @@
   transform: scale(1.05);
 }
 
+/* Отдельная громкость звука трансляции в правом нижнем углу плеера. */
+.voice-stream-audio {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 9px 4px 4px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  backdrop-filter: blur(8px);
+}
+
+.voice-stream-audio.fullscreen {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 1201;
+}
+
+.voice-stream-audio-toggle {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  transition: background 0.15s ease;
+}
+
+.voice-stream-audio-toggle:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.voice-stream-audio input[type='range'] {
+  width: 92px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.voice-stream-audio span {
+  min-width: 32px;
+  text-align: right;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.78);
+}
+
 .voice-stream-fullscreen {
   position: fixed;
   inset: 0;

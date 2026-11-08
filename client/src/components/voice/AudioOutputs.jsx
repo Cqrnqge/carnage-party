@@ -24,8 +24,11 @@ function StreamAudio({ stream, volume, muted, outputDevice }) {
 
 export default function AudioOutputs() {
   const streams = useApp((state) => state.voice.streams);
+  const screenAudioStreams = useApp((state) => state.voice.screenAudioStreams);
   const deafened = useApp((state) => state.voice.deafened);
   const outputVolume = useApp((state) => state.settings.outputVolume ?? 100);
+  const streamVolume = useApp((state) => state.settings.streamVolume ?? 100);
+  const streamMuted = useApp((state) => state.settings.streamMuted);
   const outputDevice = useApp((state) => state.settings.outputDevice);
   return (
     <div className="audio-outputs" aria-hidden="true">
@@ -35,6 +38,15 @@ export default function AudioOutputs() {
           stream={stream}
           volume={outputVolume / 100}
           muted={deafened}
+          outputDevice={outputDevice}
+        />
+      ))}
+      {Object.entries(screenAudioStreams || {}).map(([userId, stream]) => (
+        <StreamAudio
+          key={`screen-audio-${userId}`}
+          stream={stream}
+          volume={streamVolume / 100}
+          muted={deafened || streamMuted}
           outputDevice={outputDevice}
         />
       ))}
