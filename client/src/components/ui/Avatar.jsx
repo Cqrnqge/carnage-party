@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { assetUrl } from '../../api';
 import { STATUS_META } from '../../constants';
 import { cx, gradientStyle, initials } from '../../utils';
+import logoEmblem from '../../assets/logo-emblem.png';
 
 export default function Avatar({
   user,
@@ -69,21 +70,7 @@ export function ServerIcon({ server, size = 48, className = '' }) {
 export function BrandMark({ size = 46, className = '' }) {
   return (
     <div className={cx('brand-mark', className)} style={{ width: size, height: size }}>
-      <svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">
-        <defs>
-          <linearGradient id="carnageGradient" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#ff3d71" />
-            <stop offset="55%" stopColor="#d946ef" />
-            <stop offset="100%" stopColor="#7c3aed" />
-          </linearGradient>
-        </defs>
-        <rect width="64" height="64" rx="18" fill="url(#carnageGradient)" />
-        <path
-          d="M38.8 8.5 18.5 35.2c-.8 1.1 0 2.6 1.4 2.6h8.8l-4 16.1c-.3 1.4 1.4 2.3 2.4 1.2l20.8-27.3c.8-1.1 0-2.6-1.4-2.6h-9.2l4.1-15.4c.4-1.4-1.4-2.3-2.4-1.3z"
-          fill="#fff"
-          fillOpacity="0.96"
-        />
-      </svg>
+      <img src={logoEmblem} alt="" draggable={false} />
     </div>
   );
 }

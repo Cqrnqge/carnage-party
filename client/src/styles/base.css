@@ -450,11 +450,14 @@ code {
   flex: none;
   border-radius: 30%;
   overflow: hidden;
-  box-shadow: 0 6px 20px rgba(217, 70, 239, 0.28);
+  box-shadow: 0 6px 20px rgba(220, 38, 55, 0.32);
 }
 
-.brand-mark svg {
+.brand-mark img {
   display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .status-dot,

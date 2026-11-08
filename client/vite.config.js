@@ -5,7 +5,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const clientDir = path.dirname(fileURLToPath(import.meta.url));
-let version = '1.1.2';
+let version = '1.1.3';
 try {
   const pkg = JSON.parse(fs.readFileSync(path.resolve(clientDir, '..', 'package.json'), 'utf8'));
   if (pkg.version) version = pkg.version;
