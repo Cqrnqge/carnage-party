@@ -4,12 +4,24 @@ const { app, BrowserWindow, session, shell, ipcMain, desktopCapturer, Notificati
 const path = require('path');
 const fs = require('fs');
 const { setupPtt } = require('./ptt.cjs');
+const {
+  downloadFile,
+  launchUpdaterScript,
+  prepareInstalledUpdate,
+  preparePortableUpdate,
+  safeFileName,
+} = require('./updater.cjs');
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 const externalServer = process.env.CARNAGE_EXTERNAL_SERVER === '1';
 const basePort = Number(process.env.CARNAGE_PORT || 32456);
 const isPortable = Boolean(process.env.PORTABLE_EXECUTABLE_DIR);
 const DEFAULT_SERVER_FALLBACK = 'http://188.234.161.207:3001';
+
+// Версия приложения доступна preload-скрипту без IPC. Это важно, когда
+// клиент загружен с сервера: версия серверной сборки не должна выдавать
+// себя за версию установленного приложения.
+process.env.CARNAGE_APP_VERSION = app.getVersion();
 
 function normalizeServerUrl(value) {
   let url = String(value || '').trim();
@@ -154,6 +166,7 @@ if (!gotLock) {
       try {
         serverHandle = await require('../server/app.cjs').startServer({
           dataDir,
+          updatesDir: path.join(app.getPath('userData'), 'updates'),
           port,
           host: '127.0.0.1',
           serveClient: true,
@@ -336,6 +349,75 @@ if (!gotLock) {
     });
 
     ipcMain.handle('carnage:version', () => app.getVersion());
+    ipcMain.handle('carnage:build-info', () => ({
+      version: app.getVersion(),
+      portable: isPortable,
+      platform: process.platform,
+    }));
+
+    ipcMain.handle('carnage:update-download', async (_event, payload = {}) => {
+      try {
+        const url = String(payload.url || '');
+        if (!/^https?:\/\//i.test(url)) return { ok: false, error: 'Некорректная ссылка на обновление' };
+        const fileName = safeFileName(payload.fileName || url.split('/').pop());
+        if (!fileName) return { ok: false, error: 'Некорректное имя файла обновления' };
+        const dir = path.join(app.getPath('temp'), 'carnage-update');
+        fs.mkdirSync(dir, { recursive: true });
+        const destination = path.join(dir, fileName);
+        let lastSent = 0;
+        const result = await downloadFile(url, destination, (received, total) => {
+          const now = Date.now();
+          if (now - lastSent < 120 && received !== total) return;
+          lastSent = now;
+          const percent = total ? Math.min(100, Math.round((received / total) * 100)) : 0;
+          mainWindow?.webContents.send('carnage:update-progress', { received, total, percent });
+        });
+        mainWindow?.webContents.send('carnage:update-progress', {
+          received: result.size,
+          total: result.total || result.size,
+          percent: 100,
+        });
+        return { ok: true, path: destination, size: result.size };
+      } catch (err) {
+        return { ok: false, error: err.message || 'Не удалось скачать обновление' };
+      }
+    });
+
+    ipcMain.handle('carnage:update-install', async (_event, payload = {}) => {
+      try {
+        const mode = payload.mode === 'portable' ? 'portable' : 'installed';
+        const filePath = String(payload.path || '');
+        if (!filePath || !fs.existsSync(filePath)) {
+          return { ok: false, error: 'Файл обновления не найден' };
+        }
+        if (mode === 'portable' && !/\.zip$/i.test(filePath)) {
+          return { ok: false, error: 'Для portable нужен ZIP-архив' };
+        }
+        if (mode === 'installed' && !/\.exe$/i.test(filePath)) {
+          return { ok: false, error: 'Для установки нужен EXE-установщик' };
+        }
+
+        const portableFile = process.env.PORTABLE_EXECUTABLE_FILE || '';
+        const scriptPath =
+          mode === 'portable'
+            ? (
+                await preparePortableUpdate({
+                  zipPath: filePath,
+                  processId: process.pid,
+                  oldExe: portableFile
+                    ? path.basename(portableFile)
+                    : path.basename(process.execPath),
+                })
+              ).scriptPath
+            : prepareInstalledUpdate({ installerPath: filePath, processId: process.pid });
+
+        launchUpdaterScript(scriptPath);
+        setTimeout(() => app.quit(), 1200);
+        return { ok: true, restarting: true };
+      } catch (err) {
+        return { ok: false, error: err.message || 'Не удалось установить обновление' };
+      }
+    });
     ipcMain.handle('carnage:data-path', () => path.join(app.getPath('userData'), 'data'));
 
     ipcMain.handle('carnage:server-config', () => ({

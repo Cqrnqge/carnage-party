@@ -26,6 +26,7 @@ import Avatar from '../ui/Avatar';
 import Modal, { FormField } from '../ui/Modal';
 import ServerSettings from '../settings/ServerSettings';
 import { voiceManager } from '../../voice';
+import { appVersion } from '../../version';
 
 const TABS = [
   { id: 'profile', label: 'Профиль', icon: User },
@@ -286,7 +287,7 @@ export default function SettingsModal({ tab: initialTab = 'profile' }) {
             <LogOut size={17} />
             <span>Выйти</span>
           </button>
-          <div className="settings-version">Carnage Party · v1.1.0</div>
+          <div className="settings-version">Carnage Party · v{appVersion()}</div>
         </aside>
 
         <div className="settings-content">

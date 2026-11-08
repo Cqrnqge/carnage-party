@@ -5,6 +5,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const clientDir = path.dirname(fileURLToPath(import.meta.url));
+let version = '1.1.0';
+try {
+  const pkg = JSON.parse(fs.readFileSync(path.resolve(clientDir, '..', 'package.json'), 'utf8'));
+  if (pkg.version) version = pkg.version;
+} catch {}
 let defaultServer = 'http://188.234.161.207:3001';
 const envServer = String(process.env.CARNAGE_DEFAULT_SERVER || '').trim();
 if (envServer) {
@@ -27,6 +32,7 @@ export default defineConfig({
   base: './',
   define: {
     __CARNAGE_DEFAULT_SERVER__: JSON.stringify(defaultServer),
+    __CARNAGE_VERSION__: JSON.stringify(version),
   },
   build: {
     outDir: '../mobile/www',

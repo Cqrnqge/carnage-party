@@ -37,6 +37,12 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 
 public class MainActivity extends Activity {
@@ -429,6 +435,94 @@ public class MainActivity extends Activity {
         }
     }
 
+    // Скачивает APK во внутренний кэш и открывает системный установщик.
+    // Прогресс уходит в интерфейс событием carnage:update-progress.
+    private void downloadUpdate(String url, String fileName) {
+        final String targetName = sanitizeUpdateName(fileName);
+        new Thread(() -> {
+            HttpURLConnection connection = null;
+            File destination = new File(getCacheDir(), targetName);
+            try {
+                URL address = new URL(url);
+                connection = (HttpURLConnection) address.openConnection();
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(45000);
+                connection.setInstanceFollowRedirects(true);
+                connection.setRequestProperty("User-Agent", "Carnage-Party-Updater");
+                connection.connect();
+                int status = connection.getResponseCode();
+                if (status != HttpURLConnection.HTTP_OK) {
+                    throw new IOException("HTTP " + status);
+                }
+                int total = connection.getContentLength();
+                InputStream input = connection.getInputStream();
+                FileOutputStream output = new FileOutputStream(destination);
+                byte[] buffer = new byte[16384];
+                long received = 0;
+                int lastPercent = -1;
+                int read;
+                while ((read = input.read(buffer)) > 0) {
+                    output.write(buffer, 0, read);
+                    received += read;
+                    if (total > 0) {
+                        int percent = (int) (received * 100 / total);
+                        if (percent != lastPercent) {
+                            lastPercent = percent;
+                            sendUpdateProgress("downloading", percent, received, total);
+                        }
+                    }
+                }
+                output.flush();
+                output.close();
+                input.close();
+                sendUpdateProgress("downloaded", 100, received, total);
+                installApk(destination);
+            } catch (Exception error) {
+                sendUpdateProgress("error", 0, 0, 0);
+            } finally {
+                if (connection != null) {
+                    connection.disconnect();
+                }
+            }
+        }).start();
+    }
+
+    private static String sanitizeUpdateName(String value) {
+        String name = value == null ? "" : value.replaceAll("[^A-Za-z0-9._ -]", "");
+        name = new File(name).getName();
+        if (name.isEmpty() || !name.toLowerCase().endsWith(".apk")) {
+            name = "Carnage-Party-Update.apk";
+        }
+        return name;
+    }
+
+    private void installApk(File file) {
+        Uri uri = UpdateFileProvider.uriFor(file);
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setDataAndType(uri, "application/vnd.android.package-archive");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+        runOnUiThread(() -> {
+            try {
+                startActivity(intent);
+            } catch (ActivityNotFoundException error) {
+                sendUpdateProgress("error", 0, 0, 0);
+            }
+        });
+    }
+
+    private void sendUpdateProgress(String phase, int percent, long received, long total) {
+        String script = "window.dispatchEvent(new CustomEvent('carnage:update-progress',{detail:{phase:'"
+                + phase + "',percent:" + percent + ",received:" + received + ",total:" + total + "}}))";
+        if (web == null) {
+            return;
+        }
+        web.post(() -> {
+            if (web != null) {
+                web.evaluateJavascript(script, null);
+            }
+        });
+    }
+
     @Override
     public void onBackPressed() {
         if (overlayOpen && web != null) {
@@ -487,6 +581,15 @@ public class MainActivity extends Activity {
                 return;
             }
             runOnUiThread(() -> MainActivity.this.openExternal(Uri.parse(url)));
+        }
+
+        @JavascriptInterface
+        public void downloadUpdate(String url, String fileName) {
+            if (url == null || (!url.startsWith("http://") && !url.startsWith("https://"))) {
+                sendUpdateProgress("error", 0, 0, 0);
+                return;
+            }
+            MainActivity.this.downloadUpdate(url, fileName);
         }
     }
 }

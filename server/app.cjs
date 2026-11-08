@@ -28,6 +28,12 @@ const {
   ALL_PERMISSIONS,
 } = require('./permissions.cjs');
 const { makeSerializers } = require('./serializers.cjs');
+const { updateInfo } = require('./updates.cjs');
+
+let appVersion = '1.1.0';
+try {
+  appVersion = require('../package.json').version || appVersion;
+} catch {}
 
 const avatarLimit = 900_000;
 const MAX_MESSAGE_LENGTH = 4000;
@@ -42,6 +48,12 @@ function startServer(options = {}) {
   fs.mkdirSync(dataDir, { recursive: true });
   const uploadsDir = path.join(dataDir, 'uploads');
   fs.mkdirSync(uploadsDir, { recursive: true });
+  // Папка с установщиками новых версий. Сервер сканирует её на лету,
+  // поэтому файл можно добавить без перезапуска.
+  const updatesDir = path.resolve(
+    options.updatesDir || process.env.CARNAGE_UPDATE_DIR || path.join(__dirname, '..', 'updates')
+  );
+  fs.mkdirSync(updatesDir, { recursive: true });
 
   const db = new DB(dataDir).load();
   if (process.env.CARNAGE_SEED_DEMO === '1') {
@@ -62,6 +74,18 @@ function startServer(options = {}) {
   app.use(express.json({ limit: '6mb' }));
   app.use(express.urlencoded({ extended: true, limit: '6mb' }));
   app.use('/uploads', express.static(uploadsDir, { maxAge: '7d', immutable: true }));
+  app.use(
+    '/updates',
+    express.static(updatesDir, {
+      index: false,
+      setHeaders: (res, filePath) => {
+        res.setHeader('Cache-Control', 'no-store');
+        if (/\.apk$/i.test(filePath)) {
+          res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+        }
+      },
+    })
+  );
 
   // ------------------------------------------------------------------
   // Мелкие утилиты
@@ -1572,6 +1596,12 @@ function startServer(options = {}) {
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, users: db.data.users.length, messages: db.data.messages.length });
+  });
+
+  // Клиенты (desktop, portable, Android) сверяют свою версию с сервером.
+  app.get('/api/version', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(updateInfo(updatesDir, appVersion));
   });
 
   // ------------------------------------------------------------------

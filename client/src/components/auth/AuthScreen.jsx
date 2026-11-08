@@ -17,6 +17,7 @@ import { BrandMark } from '../ui/Avatar';
 import Modal from '../ui/Modal';
 import ServerSettings from '../settings/ServerSettings';
 import { isAndroidApp, openNativeServerSettings } from '../../mobile';
+import { appVersion } from '../../version';
 import { cx } from '../../utils';
 
 export default function AuthScreen() {
@@ -330,10 +331,10 @@ export default function AuthScreen() {
               ) : null}
               <span className="auth-version">
                 {isAndroidApp()
-                  ? 'v1.1.0 · android'
+                  ? `v${appVersion()} · android`
                   : window.desktop
-                    ? 'v1.1.0 · desktop'
-                    : 'v1.1.0 · web'}
+                    ? `v${appVersion()} · desktop`
+                    : `v${appVersion()} · web`}
               </span>
             </div>
           </div>

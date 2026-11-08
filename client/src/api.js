@@ -23,7 +23,13 @@ export function getServerBase() {
     if (stored) return stored;
   } catch {}
   if (typeof __CARNAGE_DEFAULT_SERVER__ !== 'undefined') {
-    return normalizeServer(__CARNAGE_DEFAULT_SERVER__);
+    const fallback = normalizeServer(__CARNAGE_DEFAULT_SERVER__);
+    if (fallback) return fallback;
+  }
+  // Клиент обычно открыт прямо с сервера (в том числе локального в Electron),
+  // поэтому текущий origin — надёжный запасной адрес.
+  if (typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol)) {
+    return window.location.origin;
   }
   return '';
 }

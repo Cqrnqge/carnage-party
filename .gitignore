@@ -9,6 +9,7 @@ mobile/build/
 mobile/.sdk/
 release/
 backup/
+old/
 
 # runtime data and secrets
 data/
@@ -20,6 +21,11 @@ server.txt
 
 # signing key
 mobile/keystore/
+
+# update binaries (README stays in git)
+updates/*
+!updates/README.txt
+!updates/changelog.json
 
 # local previews and test screenshots
 client/public/__mobile-preview.html
