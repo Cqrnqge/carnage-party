@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Monitor,
   MoreVertical,
+  Paperclip,
   Phone,
   Pin,
   Search,
@@ -103,7 +104,10 @@ export default function ChatArea({ channel, server }) {
   const [searchResults, setSearchResults] = useState(null);
   const [searching, setSearching] = useState(false);
   const [menu, setMenu] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
   const searchRef = useRef(null);
+  const messageInputRef = useRef(null);
+  const dragCounter = useRef(0);
 
   const isVoice = channel?.type === 'voice';
   const isDm = channel?.type === 'dm';
@@ -227,10 +231,53 @@ export default function ChatArea({ channel, server }) {
     setMenu({ x: rect.right - 210, y: rect.bottom + 6 });
   };
 
+  const isFileDrag = (event) => Array.from(event.dataTransfer?.types || []).includes('Files');
+
+  const onChatDragEnter = (event) => {
+    if (stageOpen || !isFileDrag(event)) return;
+    event.preventDefault();
+    dragCounter.current += 1;
+    setDragOver(true);
+  };
+
+  const onChatDragOver = (event) => {
+    if (stageOpen || !isFileDrag(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+
+  const onChatDragLeave = () => {
+    if (dragCounter.current <= 0) return;
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) setDragOver(false);
+  };
+
+  const onChatDrop = (event) => {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    dragCounter.current = 0;
+    setDragOver(false);
+    if (stageOpen) return;
+    messageInputRef.current?.addFiles(event.dataTransfer.files);
+  };
+
   if (!channel) return null;
 
   return (
-    <section className="chat-area">
+    <section
+      className="chat-area"
+      onDragEnter={onChatDragEnter}
+      onDragOver={onChatDragOver}
+      onDragLeave={onChatDragLeave}
+      onDrop={onChatDrop}
+    >
+      {dragOver && !stageOpen ? (
+        <div className="chat-drop-overlay">
+          <Paperclip size={30} />
+          <strong>Отпустите файлы, чтобы отправить в чат</strong>
+          <span>Видео, музыка, изображения и любые файлы — до 8 штук, максимум 25 МБ каждый</span>
+        </div>
+      ) : null}
       <header className="chat-header">
         {mobile ? (
           <button
@@ -411,7 +458,7 @@ export default function ChatArea({ channel, server }) {
             <>
               {isVoice ? <VoiceChannelLanding channel={channel} /> : null}
               <MessageList channel={channel} server={server} />
-              <MessageInput channel={channel} server={server} />
+              <MessageInput ref={messageInputRef} channel={channel} server={server} />
             </>
           )}
         </div>

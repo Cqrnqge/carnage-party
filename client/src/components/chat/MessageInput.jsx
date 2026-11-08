@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { File, Image as ImageIcon, Loader2, Lock, Mic, Paperclip, Send, Smile, Trash2, X } from 'lucide-react';
 import { api } from '../../api';
 import { useApp } from '../../store';
@@ -20,7 +20,7 @@ function formatRecordTime(seconds) {
   return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
 }
 
-export default function MessageInput({ channel, server }) {
+const MessageInput = forwardRef(function MessageInput({ channel, server }, ref) {
   const user = useApp((state) => state.user);
   const replyTo = useApp((state) => state.replyTo);
   const setReplyTo = useApp((state) => state.setReplyTo);
@@ -31,14 +31,12 @@ export default function MessageInput({ channel, server }) {
   const [files, setFiles] = useState([]);
   const [sending, setSending] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
   const [mention, setMention] = useState(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const typingTimer = useRef(null);
   const lastTyping = useRef(0);
-  const dragCounter = useRef(0);
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
   const recordChunks = useRef([]);
@@ -135,6 +133,8 @@ export default function MessageInput({ channel, server }) {
       return next;
     });
   };
+
+  useImperativeHandle(ref, () => ({ addFiles }));
 
   const removeFile = (id) => {
     setFiles((prev) => {
@@ -468,34 +468,7 @@ export default function MessageInput({ channel, server }) {
   }
 
   return (
-    <div
-      className={cx('message-input-wrap', dragOver && 'dragging')}
-      onDragEnter={(event) => {
-        event.preventDefault();
-        dragCounter.current += 1;
-        setDragOver(true);
-      }}
-      onDragLeave={(event) => {
-        event.preventDefault();
-        dragCounter.current -= 1;
-        if (dragCounter.current <= 0) setDragOver(false);
-      }}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => {
-        event.preventDefault();
-        dragCounter.current = 0;
-        setDragOver(false);
-        addFiles(event.dataTransfer.files);
-      }}
-    >
-      {dragOver ? (
-        <div className="drop-overlay">
-          <Paperclip size={26} />
-          <strong>Отпустите файлы, чтобы прикрепить</strong>
-          <span>До 8 файлов, максимум 25 МБ каждый</span>
-        </div>
-      ) : null}
-
+    <div className="message-input-wrap">
       {replyTo ? (
         <div className="reply-bar">
           <div className="reply-bar-main">
@@ -670,4 +643,6 @@ export default function MessageInput({ channel, server }) {
       </div>
     </div>
   );
-}
+});
+
+export default MessageInput;
