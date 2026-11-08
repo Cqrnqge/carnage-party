@@ -200,6 +200,9 @@ if (!gotLock) {
       ? process.env.VITE_DEV_SERVER_URL
       : remoteServerUrl || serverHandle?.url || `http://127.0.0.1:${basePort}`;
 
+    // В собранной версии иконка берётся из exe, в dev — из build/icon.ico.
+    const windowIcon = path.join(__dirname, '..', 'build', 'icon.ico');
+
     mainWindow = new BrowserWindow({
       width: 1440,
       height: 900,
@@ -207,6 +210,7 @@ if (!gotLock) {
       minHeight: 640,
       show: false,
       title: 'Carnage Party',
+      icon: fs.existsSync(windowIcon) ? windowIcon : undefined,
       backgroundColor: '#1e1f22',
       autoHideMenuBar: true,
       webPreferences: {

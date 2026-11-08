@@ -648,12 +648,9 @@ class VoiceManager {
   }
 
   emitSpeaking(speaking) {
-    if (this.speaking === speaking && !speaking) {
-      this.socket?.emit('voice:speaking', { speaking: false });
-      useApp.getState().setSelfSpeaking(false);
-      return;
-    }
+    if (this.speaking === speaking) return;
     this.speaking = speaking;
+    this.speakingSince = speaking ? performance.now() : 0;
     this.socket?.emit('voice:speaking', { speaking });
     useApp.getState().setSelfSpeaking(speaking);
   }
@@ -820,7 +817,21 @@ class VoiceManager {
       this.analyser.smoothingTimeConstant = 0.65;
       source.connect(this.analyser);
       const data = new Uint8Array(this.analyser.fftSize);
-      const tick = () => {
+
+      // Гистерезис: включаемся заметно выше, выключаемся ниже порога шума.
+      // Удержание не даёт рамке мигать на коротких паузах между словами.
+      const ON_LEVEL = 0.05;
+      const OFF_LEVEL = 0.018;
+      const ATTACK_MS = 90;
+      const RELEASE_MS = 340;
+      const MIN_SPEAK_MS = 380;
+
+      let level = 0;
+      let aboveSince = 0;
+      let belowSince = 0;
+      let startedAt = 0;
+
+      const tick = (now) => {
         if (!this.analyser) return;
         this.analyser.getByteTimeDomainData(data);
         let sum = 0;
@@ -829,15 +840,37 @@ class VoiceManager {
           sum += value * value;
         }
         const rms = Math.sqrt(sum / data.length);
-        const active = !this.muted && !this.deafened && rms > 0.045;
-        const now = performance.now();
-        if (active !== this.speaking && now - this.lastSpeakEmit > 220) {
-          this.lastSpeakEmit = now;
-          this.emitSpeaking(active);
+        // Быстрый подъём и медленный спад — уровень не дрожит от шума.
+        level += (rms - level) * (rms > level ? 0.4 : 0.06);
+
+        const canSpeak = !this.muted && !this.deafened;
+        if (!canSpeak) {
+          level = 0;
+          aboveSince = 0;
+          belowSince = 0;
+          startedAt = 0;
+          if (this.speaking) this.emitSpeaking(false);
+        } else if (!this.speaking) {
+          if (level >= ON_LEVEL) {
+            if (!aboveSince) aboveSince = now;
+            if (now - aboveSince >= ATTACK_MS) {
+              startedAt = now;
+              belowSince = 0;
+              this.emitSpeaking(true);
+            }
+          } else {
+            aboveSince = 0;
+          }
+        } else if (level <= OFF_LEVEL) {
+          if (!belowSince) belowSince = now;
+          const minHeld = now - startedAt >= MIN_SPEAK_MS;
+          if (minHeld && now - belowSince >= RELEASE_MS) this.emitSpeaking(false);
+        } else {
+          belowSince = 0;
         }
         this.vadRaf = requestAnimationFrame(tick);
       };
-      tick();
+      this.vadRaf = requestAnimationFrame(tick);
     } catch (err) {
       console.warn('[voice] VAD error', err);
     }
@@ -851,6 +884,7 @@ class VoiceManager {
       try { this.audioCtx.close(); } catch {}
       this.audioCtx = null;
     }
+    if (this.speaking) this.emitSpeaking(false);
     useApp.getState().setSelfSpeaking(false);
   }
 
