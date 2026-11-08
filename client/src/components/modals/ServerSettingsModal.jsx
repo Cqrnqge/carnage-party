@@ -17,7 +17,7 @@ import {
 import { api } from '../../api';
 import { useApp } from '../../store';
 import { PERMISSIONS, SERVER_ACCENTS, hasPermission, sortedRoles } from '../../constants';
-import { cx, formatFullDate, readImageFile } from '../../utils';
+import { cx, formatFullDate, readIconFile } from '../../utils';
 import Avatar, { ServerIcon } from '../ui/Avatar';
 import Modal, { FormField, ModalHeader } from '../ui/Modal';
 
@@ -159,9 +159,9 @@ export default function ServerSettingsModal({ serverId }) {
   };
 
   const pickIcon = async (file) => {
-    if (!file) return;
+    if (!file || !canManage) return;
     try {
-      const url = await readImageFile(file, { maxSize: 512, maxBytes: 600_000, square: true });
+      const url = await readIconFile(file, { maxSize: 512, maxBytes: 600_000 });
       setIcon(url);
     } catch (err) {
       toast(err.message, 'error');
@@ -327,15 +327,32 @@ export default function ServerSettingsModal({ serverId }) {
             <>
               <ModalHeader title="Обзор сервера" subtitle="Название, иконка и цвет — так сервер видят участники." />
               <div className="server-icon-editor">
-                <ServerIcon server={{ ...server, name, icon, accentColor }} size={82} />
-                <div>
-                  <button className="btn btn-secondary btn-small" onClick={() => iconRef.current?.click()}>
-                    <Camera size={15} /> Сменить иконку
+                {canManage ? (
+                  <button
+                    type="button"
+                    className="server-icon-pick"
+                    onClick={() => iconRef.current?.click()}
+                    title="Выбрать иконку с компьютера"
+                    aria-label="Выбрать иконку с компьютера"
+                  >
+                    <ServerIcon server={{ ...server, name, icon, accentColor }} size={82} />
+                    <span className="server-icon-pick-badge"><Camera size={15} /></span>
                   </button>
-                  {icon ? <button className="btn btn-ghost btn-small" onClick={() => setIcon(null)}>Убрать</button> : null}
-                  <p className="form-hint">Изображение до 600 КБ.</p>
+                ) : (
+                  <ServerIcon server={{ ...server, name, icon, accentColor }} size={82} />
+                )}
+                <div>
+                  {canManage ? (
+                    <button className="btn btn-secondary btn-small" onClick={() => iconRef.current?.click()}>
+                      <Camera size={15} /> Сменить иконку
+                    </button>
+                  ) : null}
+                  {canManage && icon ? <button className="btn btn-ghost btn-small" onClick={() => setIcon(null)}>Убрать</button> : null}
+                  <p className="form-hint">PNG, JPG, WebP, GIF или ICO — подрежем и сожмём автоматически.</p>
                 </div>
-                <input ref={iconRef} type="file" accept="image/*" hidden onChange={(event) => { pickIcon(event.target.files?.[0]); event.target.value = ''; }} />
+                {canManage ? (
+                  <input ref={iconRef} type="file" accept="image/*,.png,.jpg,.jpeg,.webp,.gif,.bmp,.ico,.cur,.avif,.svg" hidden onChange={(event) => { pickIcon(event.target.files?.[0]); event.target.value = ''; }} />
+                ) : null}
               </div>
               <FormField label="Название сервера">
                 <input value={name} onChange={(event) => setName(event.target.value)} maxLength={64} disabled={!canManage} />

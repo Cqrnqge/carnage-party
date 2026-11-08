@@ -284,3 +284,92 @@ export function readImageFile(file, options = {}) {
     image.src = objectUrl;
   });
 }
+
+// Готовит иконку сервера: принимает PNG, JPG, WebP, GIF, ICO, BMP, AVIF или SVG,
+// обрезает по центру и сохраняет в лёгкий PNG с прозрачным фоном. Если PNG
+// получается слишком большим, уменьшает сторону и в крайнем случае сохраняет JPEG.
+export function readIconFile(file, options = {}) {
+  const {
+    maxSize = 512,
+    maxBytes = 700_000,
+    fallbackBackground = '#15121c',
+  } = options;
+
+  return new Promise((resolve, reject) => {
+    if (!file) return reject(new Error('Файл не выбран'));
+    const type = String(file.type || '').toLowerCase();
+    const name = String(file.name || '');
+    const knownExtension = /\.(png|jpe?g|webp|gif|bmp|ico|cur|avif|svg)$/i.test(name);
+    if (!type.startsWith('image/') && !knownExtension) {
+      return reject(new Error('Выберите изображение: PNG, JPG, WebP, GIF или ICO'));
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      return reject(new Error('Файл слишком большой — максимум 25 МБ'));
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+
+    const finish = (dataUrl) => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(dataUrl);
+    };
+    const failed = (message) => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error(message));
+    };
+
+    image.onload = () => {
+      try {
+        const sourceWidth = image.naturalWidth || image.width;
+        const sourceHeight = image.naturalHeight || image.height;
+        if (!sourceWidth || !sourceHeight) {
+          failed('Не удалось прочитать изображение');
+          return;
+        }
+        const side = Math.min(sourceWidth, sourceHeight);
+        const sx = Math.round((sourceWidth - side) / 2);
+        const sy = Math.round((sourceHeight - side) / 2);
+
+        const render = (size, format, background) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          const context = canvas.getContext('2d');
+          if (background) {
+            context.fillStyle = background;
+            context.fillRect(0, 0, size, size);
+          }
+          context.imageSmoothingEnabled = true;
+          context.imageSmoothingQuality = 'high';
+          context.drawImage(image, sx, sy, side, side, 0, 0, size, size);
+          return canvas.toDataURL(format, 0.92);
+        };
+
+        let size = Math.max(64, Math.min(maxSize, side));
+        let dataUrl = render(size, 'image/png');
+        while (dataUrl.length > maxBytes && size > 128) {
+          size = Math.max(128, Math.round(size * 0.75));
+          dataUrl = render(size, 'image/png');
+        }
+        if (dataUrl.length > maxBytes) {
+          dataUrl = render(Math.min(size, 384), 'image/jpeg', fallbackBackground);
+        }
+        if (dataUrl.length > maxBytes) {
+          dataUrl = render(256, 'image/jpeg', fallbackBackground);
+        }
+        if (dataUrl.length > maxBytes) {
+          failed('Не удалось подготовить иконку — попробуйте другое изображение');
+          return;
+        }
+        finish(dataUrl);
+      } catch {
+        failed('Не удалось обработать изображение');
+      }
+    };
+
+    image.onerror = () =>
+      failed('Не удалось открыть изображение. Сохраните его как PNG или JPG и попробуйте снова.');
+    image.src = objectUrl;
+  });
+}

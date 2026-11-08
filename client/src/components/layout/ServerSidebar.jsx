@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Hash, Plus, Settings, Trash2, UserPlus, Volume2 } from 'lucide-react';
+import { Camera, ChevronDown, ChevronRight, Hash, Plus, Settings, Trash2, UserPlus, Volume2 } from 'lucide-react';
 import { useApp, selectChannel } from '../../store';
 import { hasPermission } from '../../constants';
 import { cx } from '../../utils';
@@ -82,6 +82,9 @@ export default function ServerSidebar() {
     { label: 'Пригласить на сервер', icon: <UserPlus size={16} />, onClick: () => openModal('invite', { serverId: server.id }) },
     (canManageServer || hasPermission(server, user?.id, 'MANAGE_ROLES') || canManageChannels)
       ? { label: 'Настройки сервера', icon: <Settings size={16} />, onClick: () => openModal('serverSettings', { serverId: server.id }) }
+      : null,
+    canManageServer
+      ? { label: 'Сменить иконку', icon: <Camera size={16} />, onClick: () => openModal('serverSettings', { serverId: server.id }) }
       : null,
     canManageChannels
       ? { label: 'Создать канал', icon: <Plus size={16} />, onClick: () => openModal('channelSettings', { serverId: server.id, create: true }) }

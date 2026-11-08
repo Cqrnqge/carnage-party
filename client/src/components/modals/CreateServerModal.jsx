@@ -3,7 +3,7 @@ import { Camera, Check, Loader2, Plus, Shield } from 'lucide-react';
 import { api } from '../../api';
 import { useApp } from '../../store';
 import { SERVER_ACCENTS } from '../../constants';
-import { cx } from '../../utils';
+import { cx, readIconFile } from '../../utils';
 import Modal, { FormField, ModalHeader } from '../ui/Modal';
 import { ServerIcon } from '../ui/Avatar';
 
@@ -18,13 +18,14 @@ export default function CreateServerModal() {
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
 
-  const pickIcon = (file) => {
+  const pickIcon = async (file) => {
     if (!file) return;
-    if (!file.type.startsWith('image/')) return toast('Выберите изображение', 'error');
-    if (file.size > 500 * 1024) return toast('Иконка должна быть меньше 500 КБ', 'error');
-    const reader = new FileReader();
-    reader.onload = () => setIcon(String(reader.result));
-    reader.readAsDataURL(file);
+    try {
+      const url = await readIconFile(file, { maxSize: 512, maxBytes: 600_000 });
+      setIcon(url);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
   };
 
   const submit = async (event) => {
@@ -58,17 +59,26 @@ export default function CreateServerModal() {
       />
       <form onSubmit={submit} className="modal-form">
         <div className="server-icon-editor">
-          <ServerIcon server={{ name: name || 'Новый сервер', icon, accentColor }} size={84} />
+          <button
+            type="button"
+            className="server-icon-pick"
+            onClick={() => fileRef.current?.click()}
+            title="Выбрать иконку с компьютера"
+            aria-label="Выбрать иконку с компьютера"
+          >
+            <ServerIcon server={{ name: name || 'Новый сервер', icon, accentColor }} size={84} />
+            <span className="server-icon-pick-badge"><Camera size={15} /></span>
+          </button>
           <div>
             <button type="button" className="btn btn-secondary btn-small" onClick={() => fileRef.current?.click()}>
               <Camera size={15} /> Загрузить иконку
             </button>
-            <p className="form-hint">PNG, JPG или GIF до 500 КБ. Необязательно.</p>
+            <p className="form-hint">PNG, JPG, WebP, GIF или ICO — подрежем и сожмём автоматически.</p>
             {icon ? (
               <button type="button" className="btn btn-ghost btn-small" onClick={() => setIcon(null)}>Убрать</button>
             ) : null}
           </div>
-          <input ref={fileRef} type="file" accept="image/*" hidden onChange={(event) => { pickIcon(event.target.files?.[0]); event.target.value = ''; }} />
+          <input ref={fileRef} type="file" accept="image/*,.png,.jpg,.jpeg,.webp,.gif,.bmp,.ico,.cur,.avif,.svg" hidden onChange={(event) => { pickIcon(event.target.files?.[0]); event.target.value = ''; }} />
         </div>
 
         <FormField label="Название сервера">
