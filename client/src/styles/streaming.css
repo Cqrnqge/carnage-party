@@ -1247,7 +1247,7 @@
   z-index: 4;
   display: flex;
   flex-direction: column;
-  min-width: 150px;
+  min-width: 190px;
   min-height: 118px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 12px;
@@ -1291,8 +1291,9 @@
 }
 
 .stream-chat-self {
-  margin-left: auto;
-  max-width: 62%;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 2px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1408,6 +1409,449 @@
   color: #fff;
   cursor: nwse-resize;
   touch-action: none;
+}
+
+/* Кнопки смены стиля на чате и камере. */
+.stream-chat-style-btn,
+.stream-pip-style {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 3px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.stream-chat-style-btn:hover,
+.stream-pip-style:hover {
+  border-color: rgba(224, 71, 210, 0.65);
+  background: rgba(224, 71, 210, 0.22);
+}
+
+.stream-chat-style-btn {
+  max-width: 118px;
+}
+
+.stream-chat-style-btn span,
+.stream-pip-style span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stream-pip-style {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 2;
+  max-width: calc(100% - 42px);
+  background: rgba(7, 6, 10, 0.66);
+  color: #fff;
+  backdrop-filter: blur(5px);
+}
+
+/* Оформление камеры в предпросмотре студии. */
+.stream-stage-pip.camera-style-classic {
+  outline: 2px solid rgba(255, 255, 255, 0.78);
+}
+
+.stream-stage-pip.camera-style-neon {
+  outline: 2px solid #ff4df0;
+  box-shadow:
+    0 0 20px rgba(255, 77, 240, 0.7),
+    0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+.stream-stage-pip.camera-style-gold {
+  outline: 2px solid #f6c453;
+  box-shadow:
+    0 0 20px rgba(246, 196, 83, 0.6),
+    0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+.stream-stage-pip.camera-style-white {
+  outline: 3px solid #ffffff;
+}
+
+.stream-stage-pip.camera-style-none {
+  outline: none;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* Варианты оформления чата. Стиль меняет фон, рамку, шапку и форму. */
+.stream-chat.chat-style-light {
+  border-color: rgba(20, 14, 28, 0.14);
+  background: rgba(248, 247, 250, 0.95);
+  color: #1c1722;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35);
+}
+
+.stream-chat.chat-style-light .stream-chat-head {
+  border-bottom-color: rgba(20, 14, 28, 0.1);
+  background: rgba(20, 14, 28, 0.05);
+}
+
+.stream-chat.chat-style-light .stream-chat-self {
+  color: rgba(28, 23, 34, 0.58);
+}
+
+.stream-chat.chat-style-light .stream-chat-author {
+  color: #9c2bb5;
+}
+
+.stream-chat.chat-style-light .stream-chat-msg.guest .stream-chat-author {
+  color: #416a9c;
+}
+
+.stream-chat.chat-style-light .stream-chat-text {
+  color: #2b2333;
+}
+
+.stream-chat.chat-style-light .stream-chat-empty {
+  color: rgba(28, 23, 34, 0.45);
+}
+
+.stream-chat.chat-style-light .stream-chat-form {
+  border-top-color: rgba(20, 14, 28, 0.1);
+  background: rgba(20, 14, 28, 0.04);
+}
+
+.stream-chat.chat-style-light .stream-chat-form input {
+  border-color: rgba(20, 14, 28, 0.16);
+  background: #ffffff;
+  color: #1c1722;
+}
+
+.stream-chat.chat-style-light .stream-chat-form input::placeholder {
+  color: rgba(28, 23, 34, 0.42);
+}
+
+.stream-chat.chat-style-light .stream-chat-style-btn {
+  border-color: rgba(20, 14, 28, 0.16);
+  background: rgba(20, 14, 28, 0.06);
+}
+
+.stream-chat.chat-style-neon {
+  border-color: rgba(255, 77, 240, 0.8);
+  background: rgba(6, 3, 18, 0.84);
+  box-shadow:
+    0 0 0 1px rgba(125, 249, 255, 0.18) inset,
+    0 0 26px rgba(255, 77, 240, 0.42),
+    0 16px 38px rgba(0, 0, 0, 0.55);
+}
+
+.stream-chat.chat-style-neon .stream-chat-head {
+  border-bottom-color: rgba(125, 249, 255, 0.2);
+  background: linear-gradient(90deg, rgba(255, 77, 240, 0.22), rgba(77, 224, 255, 0.14));
+}
+
+.stream-chat.chat-style-neon .stream-chat-title {
+  color: #ffd9ff;
+  text-shadow: 0 0 10px rgba(255, 77, 240, 0.9);
+}
+
+.stream-chat.chat-style-neon .stream-chat-author {
+  color: #7df9ff;
+  text-shadow: 0 0 8px rgba(125, 249, 255, 0.55);
+}
+
+.stream-chat.chat-style-neon .stream-chat-msg.guest .stream-chat-author {
+  color: #b9a6ff;
+}
+
+.stream-chat.chat-style-neon .stream-chat-text {
+  color: #f5f1ff;
+  text-shadow: 0 0 8px rgba(125, 249, 255, 0.22);
+}
+
+.stream-chat.chat-style-neon .stream-chat-empty {
+  color: rgba(199, 235, 255, 0.55);
+}
+
+.stream-chat.chat-style-neon .stream-chat-form {
+  border-top-color: rgba(255, 77, 240, 0.22);
+  background: rgba(255, 77, 240, 0.08);
+}
+
+.stream-chat.chat-style-neon .stream-chat-form input {
+  border-color: rgba(125, 249, 255, 0.36);
+  background: rgba(125, 249, 255, 0.07);
+  color: #f5f1ff;
+}
+
+.stream-chat.chat-style-neon .stream-chat-form input:focus {
+  border-color: #7df9ff;
+  box-shadow: 0 0 12px rgba(125, 249, 255, 0.3);
+}
+
+.stream-chat.chat-style-gold {
+  border-color: rgba(246, 196, 83, 0.66);
+  background: linear-gradient(160deg, rgba(35, 28, 13, 0.93), rgba(15, 12, 6, 0.92));
+  box-shadow:
+    0 0 0 1px rgba(246, 196, 83, 0.12) inset,
+    0 0 24px rgba(246, 196, 83, 0.22),
+    0 16px 38px rgba(0, 0, 0, 0.58);
+}
+
+.stream-chat.chat-style-gold .stream-chat-head {
+  border-bottom-color: rgba(246, 196, 83, 0.3);
+  background: rgba(246, 196, 83, 0.14);
+}
+
+.stream-chat.chat-style-gold .stream-chat-title {
+  color: #ffe3a1;
+}
+
+.stream-chat.chat-style-gold .stream-chat-author {
+  color: #ffd66e;
+}
+
+.stream-chat.chat-style-gold .stream-chat-msg.guest .stream-chat-author {
+  color: #d8c18a;
+}
+
+.stream-chat.chat-style-gold .stream-chat-text {
+  color: #fdf6e3;
+}
+
+.stream-chat.chat-style-gold .stream-chat-empty {
+  color: rgba(253, 246, 227, 0.48);
+}
+
+.stream-chat.chat-style-gold .stream-chat-form {
+  border-top-color: rgba(246, 196, 83, 0.3);
+  background: rgba(246, 196, 83, 0.08);
+}
+
+.stream-chat.chat-style-gold .stream-chat-form input {
+  border-color: rgba(246, 196, 83, 0.32);
+  background: rgba(246, 196, 83, 0.08);
+  color: #fdf6e3;
+}
+
+.stream-chat.chat-style-gold .stream-chat-form input:focus {
+  border-color: rgba(246, 196, 83, 0.8);
+}
+
+.stream-chat.chat-style-gold .stream-chat-form button {
+  background: linear-gradient(135deg, #f6c453, #b8860b);
+  color: #221a09;
+}
+
+.stream-chat.chat-style-minimal {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+.stream-chat.chat-style-minimal .stream-chat-head {
+  border-bottom-color: rgba(255, 255, 255, 0.22);
+  background: transparent;
+}
+
+.stream-chat.chat-style-minimal .stream-chat-author {
+  color: #ffffff;
+}
+
+.stream-chat.chat-style-minimal .stream-chat-msg.guest .stream-chat-author {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.stream-chat.chat-style-minimal .stream-chat-text {
+  color: #ffffff;
+}
+
+.stream-chat.chat-style-minimal .stream-chat-empty {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.stream-chat.chat-style-minimal .stream-chat-form {
+  border-top-color: transparent;
+  background: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.stream-chat.chat-style-minimal .stream-chat-form input {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.38);
+}
+
+.stream-chat.chat-style-minimal .stream-chat-style-btn {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.42);
+}
+
+/* Панель выбора оформления. */
+.stream-style-menu {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 12;
+  width: min(440px, calc(100% - 24px));
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(12, 9, 17, 0.95);
+  color: #fff;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(16px);
+  transform: translateX(-50%);
+}
+
+.stream-style-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.stream-style-menu-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stream-style-close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+}
+
+.stream-style-close:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.stream-style-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 6px;
+}
+
+.stream-style-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.stream-style-option:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.stream-style-option.active {
+  border-color: rgba(224, 71, 210, 0.7);
+  background: rgba(224, 71, 210, 0.16);
+}
+
+.stream-style-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.stream-style-option-text strong {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.stream-style-option-text em {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-style: normal;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.stream-style-swatch {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: #17121d;
+}
+
+.stream-style-swatch.chat-style-dark {
+  background: linear-gradient(160deg, #21172b, #0b0710);
+}
+
+.stream-style-swatch.chat-style-light {
+  background: #f5f3f7;
+}
+
+.stream-style-swatch.chat-style-neon {
+  border-color: #ff4df0;
+  background: linear-gradient(140deg, #16021f, #052532);
+  box-shadow: 0 0 9px rgba(255, 77, 240, 0.55);
+}
+
+.stream-style-swatch.chat-style-gold {
+  border-color: #f6c453;
+  background: linear-gradient(140deg, #4a3814, #171005);
+  box-shadow: 0 0 9px rgba(246, 196, 83, 0.4);
+}
+
+.stream-style-swatch.chat-style-minimal {
+  border-style: dashed;
+  background: transparent;
+}
+
+.stream-style-swatch.camera-style-classic {
+  border: 2px solid #ffffff;
+  background: #141018;
+}
+
+.stream-style-swatch.camera-style-neon {
+  border: 2px solid #ff4df0;
+  background: #141018;
+  box-shadow: 0 0 9px rgba(255, 77, 240, 0.7);
+}
+
+.stream-style-swatch.camera-style-gold {
+  border: 2px solid #f6c453;
+  background: #141018;
+  box-shadow: 0 0 9px rgba(246, 196, 83, 0.6);
+}
+
+.stream-style-swatch.camera-style-white {
+  border: 3px solid #ffffff;
+  background: #141018;
+}
+
+.stream-style-swatch.camera-style-none {
+  border-style: dashed;
+  background: transparent;
 }
 
 .stream-stage-bottom {

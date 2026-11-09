@@ -403,6 +403,131 @@
     }
     .chat-form button svg { width: 15px; height: 15px; }
 
+    /* Стили чата, выбранные стримером в студии. */
+    .chat.chat-style-light {
+      border-color: rgba(20, 14, 28, 0.14);
+      background: rgba(248, 247, 250, 0.95);
+      color: #1c1722;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.35);
+    }
+    .chat.chat-style-light .chat-head {
+      border-bottom-color: rgba(20, 14, 28, 0.1);
+      background: rgba(20, 14, 28, 0.05);
+    }
+    .chat.chat-style-light .chat-self { color: rgba(28, 23, 34, 0.58); }
+    .chat.chat-style-light .chat-author { color: #9c2bb5; }
+    .chat.chat-style-light .chat-msg.guest .chat-author { color: #416a9c; }
+    .chat.chat-style-light .chat-text { color: #2b2333; }
+    .chat.chat-style-light .chat-empty { color: rgba(28, 23, 34, 0.45); }
+    .chat.chat-style-light .chat-form {
+      border-top-color: rgba(20, 14, 28, 0.1);
+      background: rgba(20, 14, 28, 0.04);
+    }
+    .chat.chat-style-light .chat-form input {
+      border-color: rgba(20, 14, 28, 0.16);
+      background: #ffffff;
+      color: #1c1722;
+    }
+    .chat.chat-style-light .chat-form input::placeholder { color: rgba(28, 23, 34, 0.42); }
+
+    .chat.chat-style-neon {
+      border-color: rgba(255, 77, 240, 0.8);
+      background: rgba(6, 3, 18, 0.84);
+      box-shadow:
+        0 0 0 1px rgba(125, 249, 255, 0.18) inset,
+        0 0 26px rgba(255, 77, 240, 0.42),
+        0 16px 38px rgba(0, 0, 0, 0.55);
+    }
+    .chat.chat-style-neon .chat-head {
+      border-bottom-color: rgba(125, 249, 255, 0.2);
+      background: linear-gradient(90deg, rgba(255, 77, 240, 0.22), rgba(77, 224, 255, 0.14));
+    }
+    .chat.chat-style-neon .chat-head strong {
+      color: #ffd9ff;
+      text-shadow: 0 0 10px rgba(255, 77, 240, 0.9);
+    }
+    .chat.chat-style-neon .chat-author {
+      color: #7df9ff;
+      text-shadow: 0 0 8px rgba(125, 249, 255, 0.55);
+    }
+    .chat.chat-style-neon .chat-msg.guest .chat-author { color: #b9a6ff; }
+    .chat.chat-style-neon .chat-text {
+      color: #f5f1ff;
+      text-shadow: 0 0 8px rgba(125, 249, 255, 0.22);
+    }
+    .chat.chat-style-neon .chat-empty { color: rgba(199, 235, 255, 0.55); }
+    .chat.chat-style-neon .chat-form {
+      border-top-color: rgba(255, 77, 240, 0.22);
+      background: rgba(255, 77, 240, 0.08);
+    }
+    .chat.chat-style-neon .chat-form input {
+      border-color: rgba(125, 249, 255, 0.36);
+      background: rgba(125, 249, 255, 0.07);
+      color: #f5f1ff;
+    }
+    .chat.chat-style-neon .chat-form input:focus {
+      border-color: #7df9ff;
+      box-shadow: 0 0 12px rgba(125, 249, 255, 0.3);
+    }
+
+    .chat.chat-style-gold {
+      border-color: rgba(246, 196, 83, 0.66);
+      background: linear-gradient(160deg, rgba(35, 28, 13, 0.93), rgba(15, 12, 6, 0.92));
+      box-shadow:
+        0 0 0 1px rgba(246, 196, 83, 0.12) inset,
+        0 0 24px rgba(246, 196, 83, 0.22),
+        0 16px 38px rgba(0, 0, 0, 0.58);
+    }
+    .chat.chat-style-gold .chat-head {
+      border-bottom-color: rgba(246, 196, 83, 0.3);
+      background: rgba(246, 196, 83, 0.14);
+    }
+    .chat.chat-style-gold .chat-head strong { color: #ffe3a1; }
+    .chat.chat-style-gold .chat-author { color: #ffd66e; }
+    .chat.chat-style-gold .chat-msg.guest .chat-author { color: #d8c18a; }
+    .chat.chat-style-gold .chat-text { color: #fdf6e3; }
+    .chat.chat-style-gold .chat-empty { color: rgba(253, 246, 227, 0.48); }
+    .chat.chat-style-gold .chat-form {
+      border-top-color: rgba(246, 196, 83, 0.3);
+      background: rgba(246, 196, 83, 0.08);
+    }
+    .chat.chat-style-gold .chat-form input {
+      border-color: rgba(246, 196, 83, 0.32);
+      background: rgba(246, 196, 83, 0.08);
+      color: #fdf6e3;
+    }
+    .chat.chat-style-gold .chat-form input:focus { border-color: rgba(246, 196, 83, 0.8); }
+    .chat.chat-style-gold .chat-form button {
+      background: linear-gradient(135deg, #f6c453, #b8860b);
+      color: #221a09;
+    }
+
+    .chat.chat-style-minimal {
+      border-color: transparent;
+      background: transparent;
+      box-shadow: none;
+      backdrop-filter: none;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+    }
+    .chat.chat-style-minimal .chat-head {
+      border-bottom-color: rgba(255, 255, 255, 0.22);
+      background: transparent;
+    }
+    .chat.chat-style-minimal .chat-author { color: #ffffff; }
+    .chat.chat-style-minimal .chat-msg.guest .chat-author { color: rgba(255, 255, 255, 0.78); }
+    .chat.chat-style-minimal .chat-text { color: #ffffff; }
+    .chat.chat-style-minimal .chat-empty { color: rgba(255, 255, 255, 0.6); }
+    .chat.chat-style-minimal .chat-form {
+      border-top-color: transparent;
+      background: transparent;
+      padding-left: 0;
+      padding-right: 0;
+    }
+    .chat.chat-style-minimal .chat-form input {
+      border-color: rgba(255, 255, 255, 0.28);
+      background: rgba(0, 0, 0, 0.38);
+    }
+
     .stage:fullscreen,
     .stage.fullscreen {
       width: 100vw;
@@ -604,7 +729,15 @@
               : 'камера';
         viewersEl.textContent = String(info.viewers || 0);
         if (info.chatLayout) applyChatLayout(info.chatLayout);
+        applyChatStyle(info.chatStyle);
         document.title = (info.title || 'Трансляция') + ' · Carnage Party';
+      }
+
+      var CHAT_STYLES = ['dark', 'light', 'neon', 'gold', 'minimal'];
+
+      function applyChatStyle(style) {
+        var next = CHAT_STYLES.indexOf(String(style || '')) !== -1 ? String(style) : 'dark';
+        chatEl.className = 'chat chat-style-' + next;
       }
 
       function applyChatLayout(layout) {
@@ -893,6 +1026,10 @@
 
         socket.on('stream:chat-layout', function (payload) {
           if (payload && payload.layout) applyChatLayout(payload.layout);
+        });
+
+        socket.on('stream:chat-style', function (payload) {
+          if (payload && payload.style) applyChatStyle(payload.style);
         });
 
         socket.on('stream:signal', handleSignal);

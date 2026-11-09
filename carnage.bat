@@ -37,6 +37,7 @@ echo   15. Открыть папку updates
 echo   16. Очистить артефакты сборки
 echo   17. Проверка окружения (doctor)
 echo   18. Показать IP без VPN
+echo   19. Остановить запущенные серверы
 echo.
 echo    0. Выход
 echo.
@@ -62,6 +63,7 @@ if "%CHOICE%"=="15" goto open_updates
 if "%CHOICE%"=="16" goto clean
 if "%CHOICE%"=="17" goto doctor
 if "%CHOICE%"=="18" goto my_ip
+if "%CHOICE%"=="19" goto stop_servers
 if "%CHOICE%"=="0" goto quit
 if /i "%CHOICE%"=="Q" goto quit
 
@@ -347,6 +349,20 @@ if not exist "node_modules" (
   goto failed
 )
 call node scripts\show-my-ip.cjs
+if errorlevel 1 goto failed
+goto done
+
+REM ------------------------------------------------------------------
+REM 19. Остановка серверов
+REM ------------------------------------------------------------------
+:stop_servers
+cls
+echo [19] Остановка запущенных серверов
+echo.
+echo Будут остановлены только node-процессы этого проекта:
+echo сервер 3001/3101, Vite 5173 и локальные порты 32456-32463.
+echo.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\stop-servers.ps1"
 if errorlevel 1 goto failed
 goto done
 

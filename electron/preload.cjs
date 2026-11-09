@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('desktop', {
   focus: () => ipcRenderer.invoke('carnage:focus'),
   listScreenSources: () => ipcRenderer.invoke('carnage:screen-sources'),
   selectScreenSource: (sourceId) => ipcRenderer.invoke('carnage:screen-select', sourceId),
+  getScreenCaptureInfo: () => ipcRenderer.invoke('carnage:screen-capture-info'),
   setPtt: (key) => ipcRenderer.invoke('carnage:ptt-set', { key }),
   onPtt: (callback) => {
     const listener = (_event, payload) => callback(payload);

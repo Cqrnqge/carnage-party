@@ -424,6 +424,18 @@ function startServer(options = {}) {
   }
 
   const STREAM_CHAT_LIMIT = 100;
+  const STREAM_CHAT_STYLES = new Set(['dark', 'light', 'neon', 'gold', 'minimal']);
+  const STREAM_CAMERA_STYLES = new Set(['classic', 'neon', 'gold', 'white', 'none']);
+
+  function sanitizeChatStyle(raw) {
+    const value = String(raw || '').trim();
+    return STREAM_CHAT_STYLES.has(value) ? value : '';
+  }
+
+  function sanitizeCameraStyle(raw) {
+    const value = String(raw || '').trim();
+    return STREAM_CAMERA_STYLES.has(value) ? value : '';
+  }
 
   function sanitizeChatLayout(raw) {
     if (!raw || typeof raw !== 'object') return null;
@@ -457,6 +469,8 @@ function startServer(options = {}) {
       url: stream.mode === 'link' ? stream.publicUrl : null,
       live: Boolean(stream.hostSocketId),
       chatLayout: stream.chatLayout || null,
+      chatStyle: stream.chatStyle || 'dark',
+      cameraStyle: stream.cameraStyle || 'classic',
     };
   }
 
@@ -1770,6 +1784,8 @@ function startServer(options = {}) {
       publicUrl,
       chat: [],
       chatLayout: null,
+      chatStyle: 'dark',
+      cameraStyle: 'classic',
     };
     liveStreams.set(id, stream);
     // Если клиент создал эфир, но так и не подключился к сигналингу,
@@ -2160,6 +2176,22 @@ function startServer(options = {}) {
       if (!layout) return;
       stream.chatLayout = layout;
       streamIo.to(streamRoom(streamId)).emit('stream:chat-layout', { layout });
+    });
+
+    socket.on('stream:chat-style', (payload = {}) => {
+      if (role !== 'host') return;
+      const style = sanitizeChatStyle(payload.style ?? payload);
+      if (!style) return;
+      stream.chatStyle = style;
+      streamIo.to(streamRoom(streamId)).emit('stream:chat-style', { style });
+    });
+
+    socket.on('stream:camera-style', (payload = {}) => {
+      if (role !== 'host') return;
+      const style = sanitizeCameraStyle(payload.style ?? payload);
+      if (!style) return;
+      stream.cameraStyle = style;
+      streamIo.to(streamRoom(streamId)).emit('stream:camera-style', { style });
     });
 
     socket.on('stream:signal', (payload = {}) => {

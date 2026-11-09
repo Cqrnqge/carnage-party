@@ -3,6 +3,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Camera,
+  Check,
   Copy,
   ExternalLink,
   Eye,
@@ -13,6 +14,7 @@ import {
   Monitor,
   MonitorPlay,
   Move,
+  Palette,
   Play,
   Radio,
   RotateCw,
@@ -21,9 +23,15 @@ import {
   Volume2,
   VolumeX,
   WifiOff,
+  X,
 } from 'lucide-react';
 import { useApp } from '../../store';
-import { streamBroadcaster, watchStream } from '../../streaming';
+import {
+  CAMERA_STYLE_OPTIONS,
+  CHAT_STYLE_OPTIONS,
+  streamBroadcaster,
+  watchStream,
+} from '../../streaming';
 import { cx } from '../../utils';
 import {
   copyText,
@@ -141,6 +149,9 @@ export default function StreamView({ streamId }) {
   const [chatText, setChatText] = useState('');
   const [chatSelf, setChatSelf] = useState(null);
   const [chatLayout, setChatLayout] = useState(() => streamBroadcaster.getChatLayout());
+  const [chatStyle, setChatStyle] = useState(() => streamBroadcaster.getChatStyle());
+  const [cameraStyle, setCameraStyle] = useState(() => streamBroadcaster.getCameraStyle());
+  const [styleMenu, setStyleMenu] = useState(null);
   const [streamState, setStreamState] = useState('connecting');
   const [error, setError] = useState('');
   const [liveViewers, setLiveViewers] = useState(null);
@@ -166,7 +177,15 @@ export default function StreamView({ streamId }) {
     setChatText('');
     setChatSelf(null);
     setChatLayout(streamBroadcaster.getChatLayout());
+    setStyleMenu(null);
   }, [streamId]);
+
+  useEffect(() => {
+    if (!styleMenu) return undefined;
+    const close = () => setStyleMenu(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [styleMenu]);
 
   // Чат эфира: у стримера сообщения приходят через signalling-сокет.
   useEffect(() => {
@@ -182,6 +201,10 @@ export default function StreamView({ streamId }) {
         setChatMessages((prev) => [...prev.slice(-99), payload]);
       } else if (event === 'layout' && payload?.layout) {
         setChatLayout(payload.layout);
+      } else if (event === 'chat-style' && payload?.style) {
+        setChatStyle(payload.style);
+      } else if (event === 'camera-style' && payload?.style) {
+        setCameraStyle(payload.style);
       }
     });
   }, [mine, streamId]);
@@ -340,6 +363,8 @@ export default function StreamView({ streamId }) {
       onInfo: (info) => {
         if (info && typeof info.viewers === 'number') setLiveViewers(info.viewers);
         if (info?.chatLayout) setChatLayout(info.chatLayout);
+        if (info?.chatStyle) setChatStyle(info.chatStyle);
+        if (info?.cameraStyle) setCameraStyle(info.cameraStyle);
       },
       onChatHistory: (payload = {}) => {
         setChatMessages(Array.isArray(payload.messages) ? payload.messages : []);
@@ -350,6 +375,12 @@ export default function StreamView({ streamId }) {
       },
       onChatLayout: (layout) => {
         if (layout) setChatLayout(layout);
+      },
+      onChatStyle: (style) => {
+        if (style) setChatStyle(style);
+      },
+      onCameraStyle: (style) => {
+        if (style) setCameraStyle(style);
       },
       onEnded: () => setStreamState('ended'),
       onError: (message) => {
@@ -424,6 +455,18 @@ export default function StreamView({ streamId }) {
     if (mine) streamBroadcaster.sendChat(value);
     else watcherRef.current?.sendChat(value);
     setChatText('');
+  };
+
+  const chooseChatStyle = (style) => {
+    streamBroadcaster.setChatStyle(style, true);
+    setChatStyle(style);
+    setStyleMenu(null);
+  };
+
+  const chooseCameraStyle = (style) => {
+    streamBroadcaster.setCameraStyle(style, true);
+    setCameraStyle(style);
+    setStyleMenu(null);
   };
 
   const resumePlayback = useCallback(async () => {
@@ -587,7 +630,7 @@ export default function StreamView({ streamId }) {
               }}
             >
               <div
-                className="stream-stage-pip"
+                className={cx('stream-stage-pip', `camera-style-${cameraStyle}`)}
                 style={{
                   left: `${pipLayout.x * 100}%`,
                   top: `${pipLayout.y * 100}%`,
@@ -602,6 +645,20 @@ export default function StreamView({ streamId }) {
                 </span>
                 <button
                   type="button"
+                  className="stream-pip-style"
+                  aria-label="Сменить стиль камеры"
+                  title="Сменить стиль камеры"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setStyleMenu((current) => (current === 'camera' ? null : 'camera'));
+                  }}
+                >
+                  <Palette size={12} />
+                  <span>Сменить стиль</span>
+                </button>
+                <button
+                  type="button"
                   className="stream-pip-resize"
                   aria-label="Изменить размер камеры"
                   title="Потяните, чтобы изменить размер"
@@ -614,7 +671,7 @@ export default function StreamView({ streamId }) {
           ) : null}
 
           <div
-            className={cx('stream-chat', chatEditor && 'editable')}
+            className={cx('stream-chat', `chat-style-${chatStyle}`, chatEditor && 'editable')}
             style={{
               left: `${chatLayout.x * 100}%`,
               top: `${chatLayout.y * 100}%`,
@@ -629,6 +686,22 @@ export default function StreamView({ streamId }) {
               <span className="stream-chat-title">
                 <MessageCircle size={14} /> Чат
               </span>
+              {chatEditor ? (
+                <button
+                  type="button"
+                  className="stream-chat-style-btn"
+                  aria-label="Сменить стиль чата"
+                  title="Сменить стиль чата"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setStyleMenu((current) => (current === 'chat' ? null : 'chat'));
+                  }}
+                >
+                  <Palette size={12} />
+                  <span>Сменить стиль</span>
+                </button>
+              ) : null}
               <span className="stream-chat-self">
                 {chatSelf?.name ? `Вы: ${chatSelf.name}` : mine ? 'Стример' : 'Зритель'}
               </span>
@@ -681,6 +754,63 @@ export default function StreamView({ streamId }) {
               </button>
             ) : null}
           </div>
+
+          {styleMenu && chatEditor ? (
+            <div
+              className="stream-style-menu"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <div className="stream-style-menu-head">
+                <span>
+                  <Palette size={14} />
+                  {styleMenu === 'chat' ? 'Стиль чата' : 'Стиль камеры'}
+                </span>
+                <button
+                  type="button"
+                  className="stream-style-close"
+                  aria-label="Закрыть выбор стиля"
+                  onClick={() => setStyleMenu(null)}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="stream-style-options">
+                {(styleMenu === 'chat' ? CHAT_STYLE_OPTIONS : CAMERA_STYLE_OPTIONS).map(
+                  (option) => {
+                    const active =
+                      styleMenu === 'chat' ? chatStyle === option.id : cameraStyle === option.id;
+                    return (
+                      <button
+                        type="button"
+                        key={option.id}
+                        className={cx('stream-style-option', active && 'active')}
+                        onClick={() =>
+                          styleMenu === 'chat'
+                            ? chooseChatStyle(option.id)
+                            : chooseCameraStyle(option.id)
+                        }
+                      >
+                        <span
+                          className={cx(
+                            'stream-style-swatch',
+                            styleMenu === 'chat'
+                              ? `chat-style-${option.id}`
+                              : `camera-style-${option.id}`
+                          )}
+                        />
+                        <span className="stream-style-option-text">
+                          <strong>{option.label}</strong>
+                          <em>{option.hint}</em>
+                        </span>
+                        {active ? <Check size={14} /> : null}
+                      </button>
+                    );
+                  }
+                )}
+              </div>
+            </div>
+          ) : null}
 
           {chatEditor && !showStatus && !blocked ? (
             <span className="stream-pip-hint">

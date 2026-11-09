@@ -9,6 +9,35 @@ const ICE_SERVERS = [
   },
 ];
 
+export const CHAT_STYLE_OPTIONS = [
+  { id: 'dark', label: 'Тёмный', hint: 'Стекло и неон' },
+  { id: 'light', label: 'Светлый', hint: 'Чистый и контрастный' },
+  { id: 'neon', label: 'Неон', hint: 'Яркая подсветка' },
+  { id: 'gold', label: 'Золото', hint: 'Премиальное оформление' },
+  { id: 'minimal', label: 'Минимал', hint: 'Только текст' },
+];
+
+export const CAMERA_STYLE_OPTIONS = [
+  { id: 'classic', label: 'Классика', hint: 'Тонкая белая рамка' },
+  { id: 'neon', label: 'Неон', hint: 'Розовое свечение' },
+  { id: 'gold', label: 'Золото', hint: 'Тёплая обводка' },
+  { id: 'white', label: 'Белая', hint: 'Плотная рамка' },
+  { id: 'none', label: 'Без рамки', hint: 'Только видео' },
+];
+
+const CHAT_STYLE_IDS = CHAT_STYLE_OPTIONS.map((option) => option.id);
+const CAMERA_STYLE_IDS = CAMERA_STYLE_OPTIONS.map((option) => option.id);
+const DEFAULT_CHAT_STYLE = 'dark';
+const DEFAULT_CAMERA_STYLE = 'classic';
+
+function readStoredStyle(key, allowed, fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    if (allowed.includes(value)) return value;
+  } catch {}
+  return fallback;
+}
+
 function isMissingDevice(err) {
   return err?.name === 'OverconstrainedError' || err?.name === 'NotFoundError';
 }
@@ -37,9 +66,9 @@ async function captureCamera() {
     latency: 0.01,
   };
   const video = {
-    width: { ideal: 1280 },
-    height: { ideal: 720 },
-    frameRate: { ideal: 30, max: 60 },
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+    frameRate: { ideal: 60, max: 60 },
   };
   if (settings.inputDevice && settings.inputDevice !== 'default') {
     audio.deviceId = { exact: settings.inputDevice };
@@ -82,19 +111,40 @@ async function requestDisplay(sourceId) {
     } catch {}
   };
   await select();
+  const video = {
+    // Захватываем монитор в родном разрешении: если пользователь выбрал
+    // окно, его область вырезается уже из полноценного кадра.
+    frameRate: { ideal: 60, max: 60 },
+  };
   try {
-    return await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    return await navigator.mediaDevices.getDisplayMedia({ video, audio: true });
   } catch (err) {
     if (err?.name === 'NotAllowedError' || err?.name === 'AbortError') throw err;
     // Не все системы разрешают системный звук — показываем хотя бы видео.
     await select();
-    return navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    return navigator.mediaDevices.getDisplayMedia({ video, audio: false });
   }
 }
 
 async function captureScreen(preselectedId) {
   const sourceId = await resolveScreenSource(preselectedId);
-  return requestDisplay(sourceId);
+  const stream = await requestDisplay(sourceId);
+  let captureInfo = null;
+  try {
+    captureInfo = await window.desktop?.getScreenCaptureInfo?.();
+  } catch {}
+  if (
+    captureInfo &&
+    sourceId &&
+    captureInfo.sourceId &&
+    String(captureInfo.sourceId) !== String(sourceId)
+  ) {
+    captureInfo = null;
+  }
+  return {
+    stream,
+    info: captureInfo && typeof captureInfo === 'object' ? captureInfo : null,
+  };
 }
 
 // Ограничиваем итоговый поток 1080p, сохраняя пропорции исходного экрана.
@@ -110,9 +160,14 @@ function fitDimensions(width, height) {
   };
 }
 
-async function optimizeScreenTrack(stream) {
+async function optimizeScreenTrack(stream, { keepNative = false } = {}) {
   const track = stream?.getVideoTracks?.()[0];
-  if (!track?.applyConstraints) return;
+  if (!track) return;
+  try {
+    // detail сохраняет чёткость текста и мелких деталей при движении.
+    track.contentHint = 'detail';
+  } catch {}
+  if (keepNative || !track.applyConstraints) return;
   try {
     const settings = track.getSettings?.() || {};
     const width = Number(settings.width) || 0;
@@ -121,7 +176,7 @@ async function optimizeScreenTrack(stream) {
       await track.applyConstraints({
         width: { max: MAX_STREAM_WIDTH },
         height: { max: MAX_STREAM_HEIGHT },
-        frameRate: { max: 30 },
+        frameRate: { ideal: 60, max: 60 },
       });
     }
   } catch {}
@@ -224,13 +279,25 @@ class StreamBroadcaster {
     // Композиция «экран + камера поверх».
     this.canvas = null;
     this.canvasContext = null;
+    this.canvasTrack = null;
     this.screenVideo = null;
     this.cameraVideo = null;
     this.compositeTimer = null;
+    this.screenCrop = null;
     this.audioContext = null;
     this.audioNodes = [];
     this.pipLayout = readPipLayout();
     this.chatLayout = readChatLayout();
+    this.chatStyle = readStoredStyle(
+      'carnage_stream_chat_style',
+      CHAT_STYLE_IDS,
+      DEFAULT_CHAT_STYLE
+    );
+    this.cameraStyle = readStoredStyle(
+      'carnage_stream_camera_style',
+      CAMERA_STYLE_IDS,
+      DEFAULT_CAMERA_STYLE
+    );
     this.chatMessages = [];
     this.chatSelf = null;
     this.chatListeners = new Set();
@@ -261,19 +328,26 @@ class StreamBroadcaster {
     const needsCamera = source === 'camera' || source === 'both';
     let screenMedia = null;
     let cameraMedia = null;
+    let screenCaptureInfo = null;
     let warning = '';
 
     try {
       // Захват экрана запрашиваем первым: браузеру нужен активный жест
       // пользователя, а диалог камеры может «съесть» этот жест.
       if (needsScreen) {
-        screenMedia = await captureScreen(screenSourceId);
+        const captured = await captureScreen(screenSourceId);
+        screenMedia = captured.stream;
+        screenCaptureInfo = captured.info;
         if (!screenMedia.getVideoTracks().length) {
           stopTracks(screenMedia);
           screenMedia = null;
           throw new Error('Не удалось получить видеопоток экрана');
         }
-        await optimizeScreenTrack(screenMedia);
+        // Для окна держим родное разрешение монитора: иначе после обрезки
+        // останется слишком мало пикселей.
+        await optimizeScreenTrack(screenMedia, {
+          keepNative: Boolean(screenCaptureInfo?.cropped),
+        });
       }
 
       if (needsCamera) {
@@ -303,16 +377,25 @@ class StreamBroadcaster {
     this.screenStream = screenMedia;
     this.cameraStream = cameraMedia;
     this.source = screenMedia && cameraMedia ? 'both' : screenMedia ? 'screen' : 'camera';
+    // Обрезка окна тоже требует холста — даже если камера не включена.
+    const needsComposition = (screenMedia && cameraMedia) || Boolean(screenCaptureInfo?.cropped);
 
     try {
-      this.localStream =
-        this.source === 'both'
-          ? this.createCompositeStream()
-          : screenMedia || cameraMedia;
+      this.localStream = needsComposition
+        ? this.createCompositeStream(screenCaptureInfo)
+        : screenMedia || cameraMedia;
     } catch (err) {
       this.releaseMedia();
       throw new Error(err?.message || 'Не удалось подготовить видео');
     }
+
+    const localVideoTrack = this.localStream?.getVideoTracks?.()[0];
+    if (localVideoTrack) {
+      try {
+        localVideoTrack.contentHint = this.source === 'camera' ? 'motion' : 'detail';
+      } catch {}
+    }
+    if (!warning && screenCaptureInfo?.warning) warning = screenCaptureInfo.warning;
 
     this.bindCaptureEnded(screenMedia, 'Демонстрация экрана остановлена');
     this.bindCaptureEnded(cameraMedia, 'Камера отключена');
@@ -350,11 +433,12 @@ class StreamBroadcaster {
     return video;
   }
 
-  createCompositeStream() {
+  createCompositeStream(captureInfo = null) {
+    this.screenCrop = captureInfo?.cropped ? captureInfo.crop : null;
     const canvas = document.createElement('canvas');
-    canvas.width = 1280;
-    canvas.height = 720;
-    const context = canvas.getContext('2d');
+    canvas.width = 1920;
+    canvas.height = 1080;
+    const context = canvas.getContext('2d', { alpha: false, desynchronized: true });
     if (!context || typeof canvas.captureStream !== 'function') {
       throw new Error('Устройство не поддерживает камеру поверх экрана');
     }
@@ -362,13 +446,24 @@ class StreamBroadcaster {
     this.canvas = canvas;
     this.canvasContext = context;
     this.screenVideo = this.createVideoElement(this.screenStream);
-    this.cameraVideo = this.createVideoElement(this.cameraStream);
+    this.cameraVideo = this.cameraStream
+      ? this.createVideoElement(this.cameraStream)
+      : null;
 
     const tick = () => this.drawCompositeFrame();
-    this.compositeTimer = setInterval(tick, 1000 / 30);
+    // 60 кадров в секунду: движение остаётся плавным, а не «догоняет»
+    // редкими перерисовками.
+    this.compositeTimer = setInterval(tick, 1000 / 60);
     tick();
 
-    const videoStream = canvas.captureStream(30);
+    const videoStream = canvas.captureStream(60);
+    const videoTrack = videoStream.getVideoTracks()[0];
+    this.canvasTrack = videoTrack || null;
+    if (videoTrack) {
+      try {
+        videoTrack.contentHint = 'detail';
+      } catch {}
+    }
     const audioTracks = this.mixAudioTracks([this.cameraStream, this.screenStream]);
     return new MediaStream([...videoStream.getVideoTracks(), ...audioTracks]);
   }
@@ -413,9 +508,27 @@ class StreamBroadcaster {
     const screenHeight = screen.videoHeight;
     if (!screenWidth || !screenHeight) return;
 
-    // Итоговый кадр повторяет пропорции выбранного монитора и при
-    // необходимости ужимается до 1080p — без растягивания и обрезки.
-    const target = fitDimensions(screenWidth, screenHeight);
+    // Если выбранное окно захватывается через монитор, вырезаем только
+    // его область. Так Windows не рисует жёлтую рамку вокруг приложения.
+    let sourceX = 0;
+    let sourceY = 0;
+    let sourceWidth = screenWidth;
+    let sourceHeight = screenHeight;
+    const crop = this.screenCrop;
+    if (crop) {
+      const x = clamp(Number(crop.x) || 0, 0, 0.98);
+      const y = clamp(Number(crop.y) || 0, 0, 0.98);
+      const w = clamp(Number(crop.w) || 1, 0.02, 1 - x);
+      const h = clamp(Number(crop.h) || 1, 0.02, 1 - y);
+      sourceX = Math.floor(x * screenWidth);
+      sourceY = Math.floor(y * screenHeight);
+      sourceWidth = Math.max(2, Math.min(screenWidth - sourceX, Math.round(w * screenWidth)));
+      sourceHeight = Math.max(2, Math.min(screenHeight - sourceY, Math.round(h * screenHeight)));
+    }
+
+    // Итоговый кадр повторяет пропорции источника и при необходимости
+    // ужимается до 1080p — без растягивания и повторной обрезки.
+    const target = fitDimensions(sourceWidth, sourceHeight);
     if (canvas.width !== target.width || canvas.height !== target.height) {
       canvas.width = target.width;
       canvas.height = target.height;
@@ -424,7 +537,19 @@ class StreamBroadcaster {
     const height = target.height;
 
     try {
-      context.drawImage(screen, 0, 0, width, height);
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
+      context.drawImage(
+        screen,
+        sourceX,
+        sourceY,
+        sourceWidth,
+        sourceHeight,
+        0,
+        0,
+        width,
+        height
+      );
     } catch {
       return;
     }
@@ -448,13 +573,46 @@ class StreamBroadcaster {
     const y = clamp(layout.y * height, marginY, maxY);
     const radius = Math.max(8, Math.min(boxWidth, boxHeight) * 0.045);
 
-    context.save();
-    context.shadowColor = 'rgba(0, 0, 0, 0.55)';
-    context.shadowBlur = Math.max(10, width * 0.012);
-    context.fillStyle = '#000';
-    roundedRectPath(context, x, y, boxWidth, boxHeight, radius);
-    context.fill();
-    context.restore();
+    const cameraStyle = CAMERA_STYLE_IDS.includes(this.cameraStyle)
+      ? this.cameraStyle
+      : DEFAULT_CAMERA_STYLE;
+    const border = {
+      classic: {
+        color: 'rgba(255, 255, 255, 0.78)',
+        width: 0.0025,
+        glow: 'rgba(0, 0, 0, 0.55)',
+        blur: 0.012,
+      },
+      neon: {
+        color: '#ff4df0',
+        width: 0.0034,
+        glow: 'rgba(255, 77, 240, 0.9)',
+        blur: 0.022,
+      },
+      gold: {
+        color: '#f6c453',
+        width: 0.0034,
+        glow: 'rgba(246, 196, 83, 0.85)',
+        blur: 0.022,
+      },
+      white: {
+        color: '#ffffff',
+        width: 0.005,
+        glow: 'rgba(255, 255, 255, 0.45)',
+        blur: 0.014,
+      },
+      none: null,
+    }[cameraStyle];
+
+    if (border) {
+      context.save();
+      context.shadowColor = 'rgba(0, 0, 0, 0.55)';
+      context.shadowBlur = Math.max(10, width * 0.012);
+      context.fillStyle = '#000';
+      roundedRectPath(context, x, y, boxWidth, boxHeight, radius);
+      context.fill();
+      context.restore();
+    }
 
     context.save();
     roundedRectPath(context, x, y, boxWidth, boxHeight, radius);
@@ -464,12 +622,16 @@ class StreamBroadcaster {
     } catch {}
     context.restore();
 
-    context.save();
-    roundedRectPath(context, x, y, boxWidth, boxHeight, radius);
-    context.lineWidth = Math.max(2, width * 0.0025);
-    context.strokeStyle = 'rgba(255, 255, 255, 0.72)';
-    context.stroke();
-    context.restore();
+    if (border) {
+      context.save();
+      roundedRectPath(context, x, y, boxWidth, boxHeight, radius);
+      context.lineWidth = Math.max(2, width * border.width);
+      context.strokeStyle = border.color;
+      context.shadowColor = border.glow;
+      context.shadowBlur = Math.max(8, width * border.blur);
+      context.stroke();
+      context.restore();
+    }
   }
 
   bindCaptureEnded(stream, message) {
@@ -532,6 +694,44 @@ class StreamBroadcaster {
     }
   }
 
+  getChatStyle() {
+    return this.chatStyle;
+  }
+
+  setChatStyle(style, persist = false) {
+    if (!CHAT_STYLE_IDS.includes(style)) return this.chatStyle;
+    this.chatStyle = style;
+    if (persist) {
+      try {
+        localStorage.setItem('carnage_stream_chat_style', style);
+      } catch {}
+    }
+    this.notifyChat('chat-style', { style });
+    if (this.socket && persist) {
+      this.socket.emit('stream:chat-style', { style });
+    }
+    return this.chatStyle;
+  }
+
+  getCameraStyle() {
+    return this.cameraStyle;
+  }
+
+  setCameraStyle(style, persist = false) {
+    if (!CAMERA_STYLE_IDS.includes(style)) return this.cameraStyle;
+    this.cameraStyle = style;
+    if (persist) {
+      try {
+        localStorage.setItem('carnage_stream_camera_style', style);
+      } catch {}
+    }
+    this.notifyChat('camera-style', { style });
+    if (this.socket && persist) {
+      this.socket.emit('stream:camera-style', { style });
+    }
+    return this.cameraStyle;
+  }
+
   onChat(listener) {
     if (typeof listener !== 'function') return () => {};
     this.chatListeners.add(listener);
@@ -566,6 +766,8 @@ class StreamBroadcaster {
     this.cameraVideo = null;
     this.canvas = null;
     this.canvasContext = null;
+    this.canvasTrack = null;
+    this.screenCrop = null;
     this.audioNodes = [];
     if (this.audioContext) {
       try {
@@ -615,6 +817,18 @@ class StreamBroadcaster {
           // зрители увидели чат там, где его расположил стример.
           this.socket?.emit('stream:chat-layout', { layout: this.chatLayout });
         }
+        if (CHAT_STYLE_IDS.includes(stream.chatStyle)) {
+          this.chatStyle = stream.chatStyle;
+          this.notifyChat('chat-style', { style: this.chatStyle });
+        } else {
+          this.socket?.emit('stream:chat-style', { style: this.chatStyle });
+        }
+        if (CAMERA_STYLE_IDS.includes(stream.cameraStyle)) {
+          this.cameraStyle = stream.cameraStyle;
+          this.notifyChat('camera-style', { style: this.cameraStyle });
+        } else {
+          this.socket?.emit('stream:camera-style', { style: this.cameraStyle });
+        }
         useApp.getState().setMyStream(this.stream);
       }
     });
@@ -644,6 +858,16 @@ class StreamBroadcaster {
       if (!layout) return;
       this.chatLayout = { ...layout };
       this.notifyChat('layout', { layout: this.chatLayout });
+    });
+    socket.on('stream:chat-style', ({ style } = {}) => {
+      if (!CHAT_STYLE_IDS.includes(style)) return;
+      this.chatStyle = style;
+      this.notifyChat('chat-style', { style });
+    });
+    socket.on('stream:camera-style', ({ style } = {}) => {
+      if (!CAMERA_STYLE_IDS.includes(style)) return;
+      this.cameraStyle = style;
+      this.notifyChat('camera-style', { style });
     });
     socket.on('stream:signal', (payload) => this.handleSignal(payload));
     socket.on('stream:viewers', ({ viewers } = {}) => {
@@ -686,10 +910,34 @@ class StreamBroadcaster {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      // Параметры кодировщика задаём после negotiation: до этого список
+      // encodings у sender ещё пуст. Высокий битрейт и приоритет
+      // разрешения убирают «мыло» при движении, 60 fps — рывки.
+      for (const sender of pc.getSenders()) {
+        if (sender.track?.kind === 'video') await this.tuneVideoSender(sender);
+      }
       this.signal(viewerId, { type: 'offer', sdp: pc.localDescription });
     } catch (err) {
       console.warn('[stream] offer error', err);
       this.closePeer(viewerId);
+    }
+  }
+
+  async tuneVideoSender(sender) {
+    if (!sender?.getParameters) return;
+    try {
+      const parameters = sender.getParameters();
+      if (!Array.isArray(parameters.encodings) || !parameters.encodings.length) {
+        parameters.encodings = [{}];
+      }
+      const encoding = parameters.encodings[0];
+      // 12 Мбит/с для экрана и композиции, 8 Мбит/с для камеры.
+      encoding.maxBitrate = this.source === 'camera' ? 8_000_000 : 12_000_000;
+      encoding.maxFramerate = 60;
+      parameters.degradationPreference = 'maintain-resolution';
+      await sender.setParameters(parameters);
+    } catch (err) {
+      console.warn('[stream] Не удалось настроить кодировщик:', err?.message || err);
     }
   }
 
@@ -949,6 +1197,12 @@ export function watchStream(streamId, handlers = {}) {
   });
   socket.on('stream:chat-layout', (payload = {}) => {
     if (payload.layout) handlers.onChatLayout?.(payload.layout);
+  });
+  socket.on('stream:chat-style', (payload = {}) => {
+    if (payload.style) handlers.onChatStyle?.(payload.style);
+  });
+  socket.on('stream:camera-style', (payload = {}) => {
+    if (payload.style) handlers.onCameraStyle?.(payload.style);
   });
   socket.on('stream:signal', handleSignal);
   socket.on('stream:ended', () => {
