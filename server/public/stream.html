@@ -866,6 +866,7 @@
 
       function appendChatMessage(message) {
         if (!message || !message.text) return;
+        if (message.id && chatMessages.some(function (item) { return item.id === message.id; })) return;
         hideChatEmpty();
         chatMessages.push(message);
         if (chatMessages.length > 100) chatMessages.shift();

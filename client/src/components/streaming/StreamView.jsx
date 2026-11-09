@@ -220,7 +220,10 @@ export default function StreamView({ streamId }) {
         setChatMessages(Array.isArray(payload?.messages) ? payload.messages : []);
         setChatSelf(payload?.self || null);
       } else if (event === 'message') {
-        setChatMessages((prev) => [...prev.slice(-99), payload]);
+        setChatMessages((prev) => {
+          if (payload?.id && prev.some((item) => item.id === payload.id)) return prev;
+          return [...prev.slice(-99), payload];
+        });
       } else if (event === 'layout' && payload?.layout) {
         setChatLayout(payload.layout);
       } else if (event === 'chat-style' && payload?.style) {
@@ -366,7 +369,11 @@ export default function StreamView({ streamId }) {
         setChatSelf(payload.self || null);
       },
       onChat: (message) => {
-        if (message) setChatMessages((prev) => [...prev.slice(-99), message]);
+        if (!message) return;
+        setChatMessages((prev) => {
+          if (message.id && prev.some((item) => item.id === message.id)) return prev;
+          return [...prev.slice(-99), message];
+        });
       },
       onChatLayout: (layout) => {
         if (layout) setChatLayout(layout);

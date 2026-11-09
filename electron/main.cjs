@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, screen, session, shell, ipcMain, desktopCapturer, Notification } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, session, shell, ipcMain, desktopCapturer, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { setupPtt } = require('./ptt.cjs');
@@ -26,6 +26,16 @@ const DEFAULT_SERVER_FALLBACK = 'http://188.234.161.207:3001';
 // клиент загружен с сервера: версия серверной сборки не должна выдавать
 // себя за версию установленного приложения.
 process.env.CARNAGE_APP_VERSION = app.getVersion();
+
+// Захват окна через Windows Graphics Capture рисует жёлтую рамку вокруг
+// выбранного приложения. Отключаем это требование, как это делают
+// Discord и другие приложения с демонстрацией окна.
+try {
+  const existing = app.commandLine.getSwitchValue('disable-features');
+  const features = new Set(String(existing || '').split(',').filter(Boolean));
+  features.add('WebRtcWgcRequireBorder');
+  app.commandLine.appendSwitch('disable-features', [...features].join(','));
+} catch {}
 
 function normalizeServerUrl(value) {
   let url = String(value || '').trim();
@@ -153,139 +163,9 @@ let tray = null;
 let isQuitting = false;
 // Источник экрана, выбранный пользователем в окне выбора монитора.
 let pendingScreenSourceId = null;
-// Информация о последнем захвате: renderer узнаёт, что вместо окна был
-// захвачен монитор и какую область из него нужно вырезать.
+// Информация о последнем захвате: renderer узнаёт, какой источник выбран
+// и можно ли показывать предупреждение.
 let lastScreenCaptureInfo = null;
-let windowCaptureApi = null;
-
-function getWindowCaptureApi() {
-  if (process.platform !== 'win32') return null;
-  if (windowCaptureApi) return windowCaptureApi;
-  try {
-    const koffi = require('koffi');
-    const user32 = koffi.load('user32.dll');
-    const dwmapi = koffi.load('dwmapi.dll');
-    const rectType = koffi.struct('CARNAGE_WINDOW_RECT', {
-      left: 'int32',
-      top: 'int32',
-      right: 'int32',
-      bottom: 'int32',
-    });
-    windowCaptureApi = {
-      rectType,
-      getWindowRect: user32.func('bool __stdcall GetWindowRect(void *hWnd, _Out_ CARNAGE_WINDOW_RECT *lpRect)'),
-      isWindowVisible: user32.func('bool __stdcall IsWindowVisible(void *hWnd)'),
-      isIconic: user32.func('bool __stdcall IsIconic(void *hWnd)'),
-      // DWMWA_EXTENDED_FRAME_BOUNDS = 9: реальные видимые границы окна
-      // без невидимых краёв изменения размера.
-      dwmGetWindowAttribute: dwmapi.func(
-        'long __stdcall DwmGetWindowAttribute(void *hwnd, uint32 dwAttribute, _Out_ CARNAGE_WINDOW_RECT *pvAttribute, uint32 cbAttribute)'
-      ),
-    };
-    return windowCaptureApi;
-  } catch (err) {
-    console.warn('[electron] Обрезка окна недоступна:', err?.message || err);
-    return null;
-  }
-}
-
-function readWindowBounds(sourceId) {
-  const match = /^window:(\d+):/.exec(String(sourceId || ''));
-  if (!match) return null;
-  const hwnd = Number(match[1]);
-  const api = getWindowCaptureApi();
-  if (!api) return null;
-  try {
-    if (api.isIconic(hwnd) || !api.isWindowVisible(hwnd)) {
-      return { hwnd, hidden: true, bounds: null };
-    }
-    const rect = {};
-    if (!api.getWindowRect(hwnd, rect)) return null;
-    let bounds = {
-      left: rect.left,
-      top: rect.top,
-      right: rect.right,
-      bottom: rect.bottom,
-    };
-    const extended = {};
-    if (api.dwmGetWindowAttribute(hwnd, 9, extended, 16) === 0) {
-      const width = extended.right - extended.left;
-      const height = extended.bottom - extended.top;
-      if (width >= 32 && height >= 32) {
-        bounds = {
-          left: extended.left,
-          top: extended.top,
-          right: extended.right,
-          bottom: extended.bottom,
-        };
-      }
-    }
-    if (bounds.right - bounds.left < 32 || bounds.bottom - bounds.top < 32) return null;
-    return { hwnd, hidden: false, bounds };
-  } catch (err) {
-    console.warn('[electron] Не удалось определить границы окна:', err?.message || err);
-    return null;
-  }
-}
-
-// Возвращает монитор, на котором находится окно, и нормализованную область
-// окна внутри этого монитора. Захват самого окна через WGC рисует жёлтую
-// рамку Windows 11, поэтому захватываем монитор и вырезаем только окно.
-function resolveWindowCapture(sourceId, sources) {
-  const window = readWindowBounds(sourceId);
-  if (!window) return null;
-  if (window.hidden) {
-    return {
-      fallback: true,
-      reason: 'Окно свёрнуто или скрыто — включён прямой захват окна. Разверните его, чтобы убрать рамку Windows.',
-    };
-  }
-  try {
-    const dipRect = screen.screenToDipRect(null, {
-      x: window.bounds.left,
-      y: window.bounds.top,
-      width: window.bounds.right - window.bounds.left,
-      height: window.bounds.bottom - window.bounds.top,
-    });
-    const display = screen.getDisplayMatching(dipRect);
-    const area = display.bounds;
-    const left = Math.max(dipRect.x, area.x);
-    const top = Math.max(dipRect.y, area.y);
-    const right = Math.min(dipRect.x + dipRect.width, area.x + area.width);
-    const bottom = Math.min(dipRect.y + dipRect.height, area.y + area.height);
-    if (right - left < 40 || bottom - top < 40) {
-      return {
-        fallback: true,
-        reason: 'Окно находится за пределами монитора — включён прямой захват окна.',
-      };
-    }
-    const displaySource =
-      sources.find(
-        (source) =>
-          String(source.id).startsWith('screen:') && String(source.display_id) === String(display.id)
-      ) || sources.find((source) => source.id === `screen:${display.id}:0`);
-    if (!displaySource) {
-      return {
-        fallback: true,
-        reason: 'Не удалось сопоставить окно с монитором — включён прямой захват окна.',
-      };
-    }
-    return {
-      fallback: false,
-      source: displaySource,
-      displayId: String(display.id),
-      crop: {
-        x: Number(((left - area.x) / area.width).toFixed(5)),
-        y: Number(((top - area.y) / area.height).toFixed(5)),
-        w: Number(((right - left) / area.width).toFixed(5)),
-        h: Number(((bottom - top) / area.height).toFixed(5)),
-      },
-    };
-  } catch (err) {
-    console.warn('[electron] Не удалось вычислить область окна:', err?.message || err);
-    return null;
-  }
-}
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -522,28 +402,17 @@ if (!gotLock) {
           let source = selectedSource;
           let captureInfo = null;
 
-          // Конкретное окно: захватываем его монитор без системной рамки.
+          // Конкретное окно: захватываем именно его, а не монитор. Так в
+          // кадр попадает только выбранное приложение, окно можно двигать,
+          // а другие окна не перекрывают трансляцию.
           if (selectedSource && String(selectedSource.id).startsWith('window:')) {
-            const windowCapture = resolveWindowCapture(selectedSource.id, sources);
-            if (windowCapture && !windowCapture.fallback) {
-              source = windowCapture.source;
-              captureInfo = {
-                cropped: true,
-                displayId: windowCapture.displayId,
-                windowSourceId: selectedSource.id,
-                crop: windowCapture.crop,
-                warning: '',
-              };
-            } else {
-              captureInfo = {
-                cropped: false,
-                windowSourceId: selectedSource.id,
-                displayId: '',
-                warning:
-                  windowCapture?.reason ||
-                  'Не удалось вырезать окно из монитора — включён прямой захват окна.',
-              };
-            }
+            source = selectedSource;
+            captureInfo = {
+              cropped: false,
+              windowSourceId: selectedSource.id,
+              displayId: '',
+              warning: '',
+            };
           }
 
           // Окно закрылось между выбором и запуском — показываем монитор.
@@ -572,7 +441,7 @@ if (!gotLock) {
             console.log(
               '[electron] Демонстрация экрана:',
               selectedSource?.name || source.name,
-              captureInfo?.cropped ? '(окно через монитор)' : '',
+              String(source.id).startsWith('window:') ? '(окно напрямую)' : '',
               request?.audioRequested ? '(со звуком)' : ''
             );
             const response = { video: source };

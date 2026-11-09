@@ -112,8 +112,7 @@ async function requestDisplay(sourceId) {
   };
   await select();
   const video = {
-    // Захватываем монитор в родном разрешении: если пользователь выбрал
-    // окно, его область вырезается уже из полноценного кадра.
+    // Захватываем выбранный источник в родном разрешении: окно или монитор.
     frameRate: { ideal: 60, max: 60 },
   };
   try {
@@ -343,8 +342,8 @@ class StreamBroadcaster {
           screenMedia = null;
           throw new Error('Не удалось получить видеопоток экрана');
         }
-        // Для окна держим родное разрешение монитора: иначе после обрезки
-        // останется слишком мало пикселей.
+        // Окно захватывается напрямую: сохраняем его родное разрешение,
+        // композиция с камерой сама ужмёт кадр до 1080p.
         await optimizeScreenTrack(screenMedia, {
           keepNative: Boolean(screenCaptureInfo?.cropped),
         });
@@ -852,6 +851,9 @@ class StreamBroadcaster {
     });
     socket.on('stream:chat', (message) => {
       if (!message) return;
+      // Одно и то же сообщение может прийти повторно при переподключении.
+      // Не показываем дубль и не добавляем его в историю.
+      if (message.id && this.chatMessages.some((item) => item.id === message.id)) return;
       this.chatMessages.push(message);
       if (this.chatMessages.length > 100) {
         this.chatMessages.splice(0, this.chatMessages.length - 100);
