@@ -105,6 +105,21 @@ function useElapsed(value) {
   return formatElapsed(value);
 }
 
+// Прокручивает список чата к последнему сообщению. Повторяем в нескольких
+// кадрах: высота сообщения может измениться после подгрузки шрифта/эмодзи.
+function pinChatToBottom(list) {
+  if (!list) return;
+  const apply = () => {
+    if (!list.isConnected) return;
+    list.scrollTop = list.scrollHeight;
+  };
+  apply();
+  requestAnimationFrame(() => {
+    apply();
+    requestAnimationFrame(apply);
+  });
+}
+
 function openPublicLink(url) {
   if (!url) return;
   try {
@@ -212,12 +227,14 @@ export default function StreamView({ streamId }) {
   // Чат эфира: у стримера сообщения приходят через signalling-сокет.
   useEffect(() => {
     if (!mine) return undefined;
-    setChatMessages(Array.isArray(streamBroadcaster.chatMessages) ? streamBroadcaster.chatMessages : []);
+    // Важно: копируем массив. Иначе сокет мутирует тот же экземпляр,
+    // React не видит изменения состояния и не запускает автопрокрутку.
+    setChatMessages(Array.isArray(streamBroadcaster.chatMessages) ? [...streamBroadcaster.chatMessages] : []);
     setChatSelf(streamBroadcaster.chatSelf || null);
     setChatLayout(streamBroadcaster.getChatLayout());
     return streamBroadcaster.onChat((event, payload) => {
       if (event === 'history') {
-        setChatMessages(Array.isArray(payload?.messages) ? payload.messages : []);
+        setChatMessages(Array.isArray(payload?.messages) ? [...payload.messages] : []);
         setChatSelf(payload?.self || null);
       } else if (event === 'message') {
         setChatMessages((prev) => {
@@ -365,7 +382,7 @@ export default function StreamView({ streamId }) {
         if (info?.cameraStyle) setCameraStyle(info.cameraStyle);
       },
       onChatHistory: (payload = {}) => {
-        setChatMessages(Array.isArray(payload.messages) ? payload.messages : []);
+        setChatMessages(Array.isArray(payload.messages) ? [...payload.messages] : []);
         setChatSelf(payload.self || null);
       },
       onChat: (message) => {
@@ -405,10 +422,24 @@ export default function StreamView({ streamId }) {
     };
   }, [mine, streamId, retryKey]);
 
+  // Новое сообщение или загруженная история — всегда вниз.
+  useEffect(() => {
+    pinChatToBottom(chatListRef.current);
+  }, [chatMessages]);
+
+  // При изменении размера/положения чата тоже держим последнее сообщение.
+  useEffect(() => {
+    pinChatToBottom(chatListRef.current);
+  }, [chatLayout, chatStyle]);
+
+  // Окно чата могут растянуть или изменить размер окна приложения.
   useEffect(() => {
     const list = chatListRef.current;
-    if (list) list.scrollTop = list.scrollHeight;
-  }, [chatMessages]);
+    if (!list || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => pinChatToBottom(list));
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, []);
 
   const beginChatDrag = (event, mode, direction = 'se') => {
     if (!chatEditor) return;

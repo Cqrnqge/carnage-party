@@ -29,6 +29,7 @@ export default function MessageList({ channel, server }) {
   const openModal = useApp((state) => state.openModal);
 
   const scrollRef = useRef(null);
+  const messagesRef = useRef(null);
   const stickToBottom = useRef(true);
   const initialDone = useRef(false);
   const previousLastId = useRef(null);
@@ -49,6 +50,19 @@ export default function MessageList({ channel, server }) {
     setNewBelow(false);
   };
 
+  // Мгновенно закрепляемся внизу, повторяя после перерасчёта раскладки.
+  const pinToBottom = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    requestAnimationFrame(() => {
+      if (!el.isConnected) return;
+      el.scrollTop = el.scrollHeight;
+    });
+    stickToBottom.current = true;
+    setNewBelow(false);
+  };
+
   useEffect(() => {
     initialDone.current = false;
     stickToBottom.current = true;
@@ -63,11 +77,24 @@ export default function MessageList({ channel, server }) {
     initialDone.current = true;
     previousLastId.current = messages[messages.length - 1]?.id || null;
     requestAnimationFrame(() => {
-      const el = scrollRef.current;
-      if (el) el.scrollTop = el.scrollHeight;
+      pinToBottom();
       markChannelRead(channelId);
     });
   }, [meta.loaded, channelId, messageCount]);
+
+  // Если чат растянули, изменили размер окна или подгрузились картинки,
+  // остаёмся на последнем сообщении — пока пользователь не отлистал вверх.
+  useEffect(() => {
+    const el = scrollRef.current;
+    const content = messagesRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => {
+      if (stickToBottom.current) el.scrollTop = el.scrollHeight;
+    });
+    observer.observe(el);
+    if (content) observer.observe(content);
+    return () => observer.disconnect();
+  }, [channelId]);
 
   const lastId = messages[messages.length - 1]?.id;
 
@@ -79,10 +106,12 @@ export default function MessageList({ channel, server }) {
     }
     if (lastId && lastId !== previousLastId.current && !loadingOlder.current) {
       const el = scrollRef.current;
+      const lastMessage = messages[messages.length - 1];
+      const ownMessage = Boolean(lastMessage?.author?.id && lastMessage.author.id === me?.id);
       const nearBottom =
         !el || el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_THRESHOLD || stickToBottom.current;
-      if (nearBottom) {
-        requestAnimationFrame(() => scrollToBottom('smooth'));
+      if (nearBottom || ownMessage) {
+        requestAnimationFrame(() => pinToBottom());
         const now = Date.now();
         if (now - lastReadPing.current > 900) {
           lastReadPing.current = now;
@@ -278,7 +307,7 @@ export default function MessageList({ channel, server }) {
           </div>
         ) : null}
 
-        <div className="messages">{rendered}</div>
+        <div className="messages" ref={messagesRef}>{rendered}</div>
 
         {typingNames.length ? (
           <div className="typing-row">

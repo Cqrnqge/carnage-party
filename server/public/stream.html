@@ -346,6 +346,7 @@
       scrollbar-width: thin;
     }
     .chat-msg {
+      flex: 0 0 auto;
       display: flex;
       flex-direction: column;
       gap: 1px;
@@ -844,6 +845,7 @@
         chatEl.style.top = (y * 100) + '%';
         chatEl.style.width = (w * 100) + '%';
         chatEl.style.height = (h * 100) + '%';
+        scrollChatToBottom();
       }
 
       function setChatSelf(user) {
@@ -864,6 +866,17 @@
         chatEmptyEl = null;
       }
 
+      function scrollChatToBottom() {
+        if (!chatListEl) return;
+        chatListEl.scrollTop = chatListEl.scrollHeight;
+        requestAnimationFrame(function () {
+          chatListEl.scrollTop = chatListEl.scrollHeight;
+          requestAnimationFrame(function () {
+            chatListEl.scrollTop = chatListEl.scrollHeight;
+          });
+        });
+      }
+
       function appendChatMessage(message) {
         if (!message || !message.text) return;
         if (message.id && chatMessages.some(function (item) { return item.id === message.id; })) return;
@@ -882,7 +895,7 @@
         row.appendChild(text);
         chatListEl.appendChild(row);
         while (chatListEl.children.length > 100) chatListEl.removeChild(chatListEl.firstChild);
-        chatListEl.scrollTop = chatListEl.scrollHeight;
+        scrollChatToBottom();
       }
 
       function renderChatHistory(messages, self) {
@@ -1067,6 +1080,10 @@
       });
 
       window.addEventListener('resize', closeEmojiPop);
+      window.addEventListener('resize', scrollChatToBottom);
+      if (typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(scrollChatToBottom).observe(chatListEl);
+      }
 
       function fullscreenElement() {
         return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement || null;
