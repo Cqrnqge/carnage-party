@@ -605,6 +605,28 @@
   animation: streamPulse 1.5s infinite;
 }
 
+.voice-control.demo {
+  position: relative;
+}
+
+.voice-control.demo.active {
+  background: rgba(56, 189, 248, 0.16);
+  border-color: rgba(56, 189, 248, 0.42);
+  color: #a9e4ff;
+}
+
+.voice-control-demo-dot {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 0 2px var(--bg-4);
+  animation: streamPulse 1.5s infinite;
+}
+
 .voice-control.danger.active {
   background: var(--red-soft);
   border-color: rgba(242, 63, 67, 0.45);

@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cx } from '../../utils';
 
-export default function ContextMenu({ x, y, items = [], onClose }) {
+export default function ContextMenu({ x, y, items = [], menuTitle = '', menuNote = '', onClose }) {
   const ref = useRef(null);
   const [pos, setPos] = useState({ left: x, top: y, visible: false });
 
@@ -39,6 +39,12 @@ export default function ContextMenu({ x, y, items = [], onClose }) {
       style={{ left: pos.left, top: pos.top, opacity: pos.visible ? 1 : 0 }}
       onContextMenu={(event) => event.preventDefault()}
     >
+      {menuTitle ? (
+        <div className="context-heading">
+          <strong>{menuTitle}</strong>
+          {menuNote ? <span>{menuNote}</span> : null}
+        </div>
+      ) : null}
       {items.map((item, index) => {
         if (item === 'separator') return <div className="context-separator" key={`sep-${index}`} />;
         if (!item) return null;

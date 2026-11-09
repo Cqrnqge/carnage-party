@@ -1024,6 +1024,26 @@ input[type="range"]:focus {
   to { opacity: 1; transform: scale(1); }
 }
 
+.context-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 4px;
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.context-heading strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.context-heading span {
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
 .context-item {
   display: flex;
   align-items: center;

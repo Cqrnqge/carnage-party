@@ -13,6 +13,7 @@ import {
   MonitorOff,
   PhoneOff,
   Radio,
+  ScreenShare,
   Settings,
   Volume2,
   VolumeX,
@@ -20,6 +21,7 @@ import {
 import { useApp, selectChannel } from '../../store';
 import { cx, keyLabel } from '../../utils';
 import Avatar from '../ui/Avatar';
+import ContextMenu from '../ui/ContextMenu';
 import { voiceManager } from '../../voice';
 import { playSound } from '../../sounds';
 
@@ -156,6 +158,7 @@ export default function VoiceStage() {
   const streams = useApp((state) => state.streams);
   const [fullscreen, setFullscreen] = useState(false);
   const [streamFullscreen, setStreamFullscreen] = useState(null);
+  const [demoMenu, setDemoMenu] = useState(null);
   const previousScreens = useRef({ channelId: null, ids: new Set() });
 
   const channelParticipants = voiceStates[voice.channelId] || [];
@@ -376,20 +379,27 @@ export default function VoiceStage() {
             <span>{voice.deafened ? 'Вкл. звук' : 'Звук'}</span>
           </button>
           <button
-            className={cx('voice-control', voice.camera && 'active')}
-            onClick={() => voiceManager.toggleCamera()}
-            title={voice.camera ? 'Выключить камеру' : 'Включить камеру'}
+            className={cx(
+              'voice-control',
+              'demo',
+              (voice.camera || voice.screen) && 'active screen'
+            )}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              setDemoMenu({
+                x: Math.max(8, rect.left + rect.width / 2 - 130),
+                y: Math.max(8, rect.top - 196),
+              });
+            }}
+            title="Демонстрация: камера или экран только для канала"
+            aria-haspopup="menu"
+            aria-expanded={Boolean(demoMenu)}
           >
-            {voice.camera ? <Camera size={22} /> : <CameraOff size={22} />}
-            <span>Камера</span>
-          </button>
-          <button
-            className={cx('voice-control', voice.screen && 'active screen')}
-            onClick={() => voiceManager.toggleScreen()}
-            title={voice.screen ? 'Остановить показ экрана' : 'Показать экран'}
-          >
-            {voice.screen ? <Monitor size={22} /> : <MonitorOff size={22} />}
-            <span>Экран</span>
+            <ScreenShare size={22} />
+            <span>Демонстрация</span>
+            {voice.camera || voice.screen ? (
+              <span className="voice-control-demo-dot" />
+            ) : null}
           </button>
           <button
             className={cx('voice-control', 'stream', channelStreams.length > 0 && 'live')}
@@ -441,6 +451,37 @@ export default function VoiceStage() {
   return (
     <>
       {content}
+      {demoMenu ? (
+        <ContextMenu
+          x={demoMenu.x}
+          y={demoMenu.y}
+          menuTitle="Демонстрация"
+          menuNote="Камеру и экран видят только участники голосового канала."
+          items={[
+            {
+              key: 'camera',
+              icon: voice.camera ? <Camera size={16} /> : <CameraOff size={16} />,
+              label: voice.camera ? 'Выключить камеру' : 'Включить камеру',
+              hint: voice.camera ? 'включена' : '',
+              onClick: () => {
+                setDemoMenu(null);
+                voiceManager.toggleCamera();
+              },
+            },
+            {
+              key: 'screen',
+              icon: voice.screen ? <Monitor size={16} /> : <MonitorOff size={16} />,
+              label: voice.screen ? 'Остановить показ экрана' : 'Показать экран',
+              hint: voice.screen ? 'показан' : '',
+              onClick: () => {
+                setDemoMenu(null);
+                voiceManager.toggleScreen();
+              },
+            },
+          ]}
+          onClose={() => setDemoMenu(null)}
+        />
+      ) : null}
       {focused && focused.screen && focusedStream ? (
         <div
           className="voice-stream-fullscreen"
