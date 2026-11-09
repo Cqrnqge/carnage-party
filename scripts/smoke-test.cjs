@@ -123,6 +123,67 @@ function waitForEvent(socket, event, timeout = 5000) {
     }
   }
 
+  // 8. Watch Party: создание комнаты, сокет, синхронизация, чат, закрытие
+  if (channel) {
+    const created = await json('/api/watch', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        channelId: channel.id,
+        title: 'smoke-test: watch party',
+        source: { type: 'youtube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      }),
+    });
+    const room = created.data?.room;
+    ok('POST /api/watch', created.response.ok && Boolean(room?.id), created.response.status);
+    ok('Watch Party источник YouTube', room?.source?.videoId === 'dQw4w9WgXcQ');
+
+    const listed = await json('/api/watch', { headers: auth });
+    ok('GET /api/watch', listed.response.ok && (listed.data?.rooms || []).some((r) => r.id === room?.id));
+
+    const bootWithWatch = await json('/api/bootstrap', { headers: auth });
+    ok('Watch Party в bootstrap', (bootWithWatch.data?.watch || []).some((r) => r.id === room?.id));
+
+    if (room?.id) {
+      const watchSocket = io(`${base}/watch`, {
+        auth: { token, roomId: room.id },
+        transports: ['websocket'],
+        reconnection: false,
+        timeout: 5000,
+      });
+      const watchConnected = await new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(false), 6000);
+        watchSocket.once('connect', () => {
+          clearTimeout(timer);
+          resolve(true);
+        });
+        watchSocket.once('connect_error', () => {
+          clearTimeout(timer);
+          resolve(false);
+        });
+      });
+      ok('Watch Party socket подключение', watchConnected);
+      const state = await waitForEvent(watchSocket, 'watch:state').catch(() => null);
+      ok('watch:state при входе', state?.room?.id === room.id && state?.self?.host === true);
+
+      if (watchConnected) {
+        const syncWait = waitForEvent(watchSocket, 'watch:sync', 5000).catch(() => null);
+        watchSocket.emit('watch:command', { action: 'play', position: 12 });
+        const sync = await syncWait;
+        ok('watch:sync после команды хоста', sync?.state?.playing === true && sync?.state?.position === 12);
+
+        const chatWait = waitForEvent(watchSocket, 'watch:chat', 5000).catch(() => null);
+        watchSocket.emit('watch:chat', { text: 'smoke-test: привет из комнаты' });
+        const chatMessage = await chatWait;
+        ok('watch:chat сообщение', chatMessage?.text === 'smoke-test: привет из комнаты');
+      }
+
+      const removed = await json(`/api/watch/${room.id}`, { method: 'DELETE', headers: auth });
+      ok('DELETE /api/watch', removed.response.ok);
+      watchSocket.close();
+    }
+  }
+
   if (connected) {
     await new Promise((resolve) => {
       const timer = setTimeout(resolve, 500);

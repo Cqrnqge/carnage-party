@@ -1040,6 +1040,20 @@
   overflow-y: auto;
 }
 
+.roles-manage-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.roles-manage-link:hover {
+  color: var(--accent);
+}
+
 .role-check-row {
   display: flex;
   align-items: center;

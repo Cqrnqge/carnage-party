@@ -5,17 +5,24 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Eye,
+  EyeOff,
   Hash,
+  KeyRound,
   Link2,
   Loader2,
   Monitor,
   MonitorPlay,
   Radio,
+  RadioTower,
+  ShieldCheck,
+  Signal,
   Video,
 } from 'lucide-react';
 import { useApp } from '../../store';
 import { streamBroadcaster } from '../../streaming';
 import { copyText, sourceLabel } from '../../stream-utils';
+import { RTMP_PLATFORMS, rtmpManager } from '../../rtmp';
 import { cx } from '../../utils';
 import Modal, { ModalHeader } from '../ui/Modal';
 
@@ -53,10 +60,14 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
   const [screenId, setScreenId] = useState('');
   const [screenError, setScreenError] = useState('');
   const [sourceTab, setSourceTab] = useState('screen');
+  const [rtmp, setRtmp] = useState(() => rtmpManager.snapshot());
+  const [rtmpError, setRtmpError] = useState('');
+  const [showKeys, setShowKeys] = useState({});
   const previewRef = useRef(null);
 
   const canScreen = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getDisplayMedia);
   const desktopScreens = typeof window !== 'undefined' && Boolean(window.desktop?.listScreenSources);
+  const rtmpSupported = typeof window !== 'undefined' && Boolean(window.desktop?.rtmp?.start);
   const wantsBoth = wants.camera && wants.screen;
   const selectedSource = wantsBoth ? 'both' : wants.screen ? 'screen' : 'camera';
   const monitorSources = screens.filter((source) => source.type !== 'window');
@@ -99,6 +110,13 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
     };
   }, [desktopScreens, wants.screen]);
 
+  useEffect(() => {
+    if (!rtmpSupported) return undefined;
+    const unsubscribe = rtmpManager.subscribe(setRtmp);
+    rtmpManager.load().catch(() => {});
+    return unsubscribe;
+  }, [rtmpSupported]);
+
   const toggleSource = (key) => {
     if (busy) return;
     if (key === 'screen' && !canScreen) return;
@@ -108,6 +126,40 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
       if (!next.camera && !next.screen) return prev;
       return next;
     });
+  };
+
+  const updateRtmpTarget = (platform, patch) => {
+    const next = rtmp.targets.map((item) =>
+      item.platform === platform ? { ...item, ...patch } : item
+    );
+    rtmpManager.setTargets(next);
+    setRtmp(rtmpManager.snapshot());
+  };
+
+  const toggleRtmpTarget = (platform) => {
+    if (busy) return;
+    const target = rtmp.targets.find((item) => item.platform === platform);
+    if (!target) return;
+    updateRtmpTarget(platform, { enabled: !target.enabled });
+  };
+
+  const enabledRtmpTargets = rtmp.targets.filter(
+    (item) =>
+      item.enabled &&
+      item.server.trim() &&
+      (item.platform === 'custom' || item.key.trim())
+  );
+
+  const startRtmp = async () => {
+    if (!enabledRtmpTargets.length) return;
+    setRtmpError('');
+    try {
+      await rtmpManager.start(streamBroadcaster.localStream, rtmp.targets);
+    } catch (err) {
+      const message = err?.message || 'Не удалось запустить мультистрим';
+      setRtmpError(message);
+      toast(message, 'error');
+    }
   };
 
   useEffect(() => {
@@ -150,6 +202,16 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
       setResult(stream);
       setStep('ready');
       toast(mode === 'link' ? 'Эфир запущен — ссылка готова' : 'Вы в эфире!', 'success');
+      if (enabledRtmpTargets.length) {
+        setRtmpError('');
+        rtmpManager
+          .start(streamBroadcaster.localStream, rtmp.targets)
+          .catch((err) => {
+            const message = err?.message || 'Не удалось запустить мультистрим';
+            setRtmpError(message);
+            toast(message, 'error');
+          });
+      }
     } catch (err) {
       setError(err?.message || 'Не удалось начать трансляцию');
     } finally {
@@ -179,6 +241,10 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
     toast('Ссылка скопирована', 'success');
     setTimeout(() => setCopied(false), 2200);
   };
+
+  const rtmpFailed =
+    rtmp.status.phase === 'error' ||
+    (rtmp.status.phase === 'idle' && Boolean(rtmpError));
 
   return (
     <Modal onClose={close} className="start-stream-modal" showClose={!busy} closeOnEscape={!busy}>
@@ -251,6 +317,43 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
               <span>Зрители найдут эфир в разделе Streaming и смогут смотреть его прямо в Carnage Party.</span>
             </div>
           )}
+
+          {rtmpSupported && (rtmpFailed || rtmp.status.phase !== 'idle') ? (
+            <div className={cx('stream-rtmp-status', rtmpFailed && 'error')}>
+              <span className="stream-rtmp-status-icon">
+                {rtmpFailed ? (
+                  <RadioTower size={17} />
+                ) : (
+                  <Signal size={17} className={rtmp.status.phase === 'live' ? 'live' : 'spin'} />
+                )}
+              </span>
+              <div className="stream-rtmp-status-text">
+                <strong>
+                  {rtmpFailed
+                    ? 'Мультистрим остановлен'
+                    : rtmp.status.phase === 'live'
+                      ? 'Мультистрим идёт'
+                      : 'Запускаем мультистрим…'}
+                </strong>
+                <span>
+                  {rtmp.status.destinations?.length
+                    ? rtmp.status.destinations.map((item) => item.label).join(' · ')
+                    : enabledRtmpTargets.map((item) => item.label).join(' · ')}
+                </span>
+                {rtmpFailed && (rtmpError || rtmp.status.error) ? (
+                  <em>{(rtmpError || rtmp.status.error).split('\n')[0]}</em>
+                ) : null}
+              </div>
+              {rtmp.status.phase === 'live' && !rtmpFailed ? (
+                <span className="stream-rtmp-live-chip">LIVE</span>
+              ) : null}
+              {rtmpFailed ? (
+                <button type="button" className="btn btn-ghost btn-small" onClick={startRtmp}>
+                  Повторить
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="modal-actions">
             <button type="button" className="btn btn-ghost" onClick={close}>
@@ -442,6 +545,133 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
             )
           ) : null}
 
+          {rtmpSupported ? (
+            <div className="stream-rtmp-block">
+              <div className="stream-rtmp-head">
+                <span className="stream-rtmp-head-title">
+                  <RadioTower size={16} />
+                  Мультистрим
+                </span>
+                <span className="stream-step-optional">Twitch · YouTube · VK · свой RTMP</span>
+              </div>
+              <p className="stream-rtmp-hint">
+                Отправляйте эфир сразу на несколько площадок. ffmpeg перекодирует поток
+                на этом компьютере — интернет площадок не влияет на эфир в Carnage Party.
+              </p>
+
+              <div className="stream-rtmp-grid">
+                {RTMP_PLATFORMS.map((platform) => {
+                  const target = rtmp.targets.find((item) => item.platform === platform.id);
+                  const active = Boolean(target?.enabled);
+                  return (
+                    <button
+                      type="button"
+                      key={platform.id}
+                      className={cx('stream-rtmp-chip', active && 'active')}
+                      onClick={() => toggleRtmpTarget(platform.id)}
+                      disabled={busy}
+                      aria-pressed={active}
+                    >
+                      <span className="stream-rtmp-chip-dot" />
+                      <span className="stream-rtmp-chip-text">
+                        <strong>{platform.label}</strong>
+                        <em>{active ? 'включено' : 'выключено'}</em>
+                      </span>
+                      <span className={cx('stream-rtmp-chip-check', active && 'on')}>
+                        {active ? <Check size={12} /> : null}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {rtmp.targets
+                .filter((item) => item.enabled)
+                .map((target) => {
+                  const platform = RTMP_PLATFORMS.find((item) => item.id === target.platform);
+                  return (
+                    <div className="stream-rtmp-card" key={target.id}>
+                      <div className="stream-rtmp-card-head">
+                        <strong>{platform?.label || target.label}</strong>
+                        <span>{platform?.hint}</span>
+                      </div>
+                      {target.platform === 'custom' ? (
+                        <label className="stream-rtmp-field">
+                          <span>Полный RTMP-адрес</span>
+                          <div className="stream-rtmp-input">
+                            <Link2 size={14} />
+                            <input
+                              value={target.server}
+                              onChange={(event) =>
+                                updateRtmpTarget(target.platform, { server: event.target.value })
+                              }
+                              placeholder="rtmp://host/app/key"
+                              disabled={busy}
+                              spellCheck={false}
+                            />
+                          </div>
+                        </label>
+                      ) : (
+                        <>
+                          <label className="stream-rtmp-field">
+                            <span>Адрес сервера</span>
+                            <div className="stream-rtmp-input">
+                              <Link2 size={14} />
+                              <input
+                                value={target.server}
+                                onChange={(event) =>
+                                  updateRtmpTarget(target.platform, { server: event.target.value })
+                                }
+                                placeholder={platform?.server}
+                                disabled={busy}
+                                spellCheck={false}
+                              />
+                            </div>
+                          </label>
+                          <label className="stream-rtmp-field">
+                            <span>Ключ потока</span>
+                            <div className="stream-rtmp-input">
+                              <KeyRound size={14} />
+                              <input
+                                type={showKeys[target.id] ? 'text' : 'password'}
+                                value={target.key}
+                                onChange={(event) =>
+                                  updateRtmpTarget(target.platform, { key: event.target.value })
+                                }
+                                placeholder="Вставьте ключ трансляции"
+                                disabled={busy}
+                                autoComplete="off"
+                                spellCheck={false}
+                              />
+                              <button
+                                type="button"
+                                className="icon-btn stream-rtmp-eye"
+                                onClick={() =>
+                                  setShowKeys((prev) => ({ ...prev, [target.id]: !prev[target.id] }))
+                                }
+                                title={showKeys[target.id] ? 'Скрыть ключ' : 'Показать ключ'}
+                                tabIndex={-1}
+                              >
+                                {showKeys[target.id] ? <EyeOff size={14} /> : <Eye size={14} />}
+                              </button>
+                            </div>
+                          </label>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+
+              <div className="stream-rtmp-note">
+                <ShieldCheck size={14} />
+                <span>
+                  Ключи шифруются средствами Windows и хранятся только на этом компьютере.
+                  На сервер Carnage Party они не отправляются.
+                </span>
+              </div>
+            </div>
+          ) : null}
+
           <label className="form-field stream-title-field">
             <span className="stream-title-head">
               <span className="form-label">Название трансляции</span>
@@ -485,6 +715,7 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
           ) : null}
 
           {error ? <div className="stream-setup-error">{error}</div> : null}
+          {rtmpError ? <div className="stream-setup-error">{rtmpError}</div> : null}
 
           <div className="modal-actions stream-setup-actions">
             <span className="stream-footnote">

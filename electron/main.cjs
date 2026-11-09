@@ -1,9 +1,10 @@
 'use strict';
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, session, shell, ipcMain, desktopCapturer, Notification } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, session, shell, ipcMain, desktopCapturer, Notification, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { setupPtt } = require('./ptt.cjs');
+const { registerRtmp } = require('./rtmp.cjs');
 const {
   downloadFile,
   launchUpdaterScript,
@@ -231,9 +232,25 @@ if (!gotLock) {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+        webviewTag: true,
         spellcheck: true,
         backgroundThrottling: false,
       },
+    });
+
+    // Встроенный браузер Watch Party. Гостевые страницы не получают доступ
+    // к Node.js и preload приложения — это обычный изолированный Chromium.
+    mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+      delete webPreferences.preload;
+      webPreferences.nodeIntegration = false;
+      webPreferences.contextIsolation = true;
+      webPreferences.sandbox = true;
+      try {
+        const target = new URL(params.src);
+        if (target.protocol !== 'http:' && target.protocol !== 'https:') event.preventDefault();
+      } catch {
+        event.preventDefault();
+      }
     });
 
     mainWindow.once('ready-to-show', () => mainWindow.show());
@@ -358,6 +375,17 @@ if (!gotLock) {
     session.defaultSession.setPermissionCheckHandler((_wc, permission) => allowedPermissions.has(permission));
 
     setupPtt({ app, ipcMain, getWindow: () => mainWindow });
+
+    registerRtmp({
+      ipcMain,
+      app,
+      safeStorage,
+      broadcast: (channel, payload) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send(channel, payload);
+        }
+      },
+    });
 
     ipcMain.handle('carnage:screen-sources', async () => {
       // Показываем и мониторы, и открытые окна приложений — как в обычной

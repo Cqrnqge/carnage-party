@@ -15,6 +15,7 @@ import {
   Radio,
   Search,
   Settings,
+  Tv,
   UserPlus,
   Users,
   Volume2,
@@ -31,6 +32,7 @@ import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import VoiceStage from '../voice/VoiceStage';
 import ChannelStreamBanner from '../streaming/ChannelStreamBanner';
+import WatchPartyBanner from '../watch/WatchPartyBanner';
 import { voiceManager } from '../../voice';
 import { useMobileClient } from '../../mobile';
 
@@ -328,6 +330,18 @@ export default function ChatArea({ channel, server }) {
               <Radio size={19} />
             </button>
           ) : null}
+          {!isDm && !isSaved ? (
+            <button
+              className="icon-btn"
+              onClick={() =>
+                openModal('watchSetup', { channelId: channel.id, channelName: channel.name })
+              }
+              title="Watch Party — смотреть видео вместе"
+              aria-label="Watch Party — смотреть видео вместе"
+            >
+              <Tv size={19} />
+            </button>
+          ) : null}
           {isDm && other ? (
             <button
               className="icon-btn mobile-hide"
@@ -429,6 +443,7 @@ export default function ChatArea({ channel, server }) {
       <div className="chat-content">
         <div className={cx('chat-main', stageOpen && 'chat-main-voice')}>
           <ChannelStreamBanner channelId={channel.id} />
+          <WatchPartyBanner channelId={channel.id} />
           {voiceRoom ? (
             <div className="voice-room-tabs">
               <div className="voice-room-tab-group">

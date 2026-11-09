@@ -103,6 +103,7 @@ export const useApp = create((set, get) => ({
 
   streams: [],
   myStream: null,
+  watchRooms: [],
 
   modal: null,
   screenPicker: null,
@@ -156,6 +157,7 @@ export const useApp = create((set, get) => ({
     const myStream = state.myStream
       ? streams.find((stream) => stream.id === state.myStream.id) || state.myStream
       : null;
+    const watchRooms = Array.isArray(payload.watch) ? payload.watch : state.watchRooms;
 
     set({
       user: payload.user || state.user,
@@ -172,6 +174,7 @@ export const useApp = create((set, get) => ({
       voice,
       streams,
       myStream,
+      watchRooms,
       active,
       ready: true,
     });
@@ -203,6 +206,7 @@ export const useApp = create((set, get) => ({
       incomingCall: null,
       streams: [],
       myStream: null,
+      watchRooms: [],
       modal: null,
       toasts: [],
       replyTo: null,
@@ -226,6 +230,14 @@ export const useApp = create((set, get) => ({
   },
 
   setMyStream: (stream) => set({ myStream: stream ? { ...stream } : null }),
+
+  applyWatchUpdate: ({ room, roomId, channelId }) => {
+    const id = room?.id || roomId;
+    if (!id) return;
+    const list = (get().watchRooms || []).filter((item) => item.id !== id);
+    if (room) list.push(room);
+    set({ watchRooms: list });
+  },
 
   // ------------------------------------------------------------------
   // Навигация

@@ -15,6 +15,7 @@ import {
   Radio,
   ScreenShare,
   Settings,
+  Tv,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -414,6 +415,19 @@ export default function VoiceStage() {
             <Radio size={22} />
             <span>Стрим</span>
             {channelStreams.length ? <span className="voice-control-live" /> : null}
+          </button>
+          <button
+            className="voice-control watch"
+            onClick={() =>
+              openModal('watchSetup', {
+                channelId: voice.channelId,
+                channelName,
+              })
+            }
+            title="Watch Party — смотреть видео вместе"
+          >
+            <Tv size={22} />
+            <span>Watch Party</span>
           </button>
           <button
             className="voice-control"

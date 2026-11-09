@@ -96,7 +96,7 @@ function RoleEditor({ server, role, onSave, onDelete, onCancel, busy }) {
   );
 }
 
-export default function ServerSettingsModal({ serverId }) {
+export default function ServerSettingsModal({ serverId, initialTab = 'overview' }) {
   const servers = useApp((state) => state.servers);
   const me = useApp((state) => state.user);
   const updateServer = useApp((state) => state.updateServer);
@@ -106,7 +106,7 @@ export default function ServerSettingsModal({ serverId }) {
   const toast = useApp((state) => state.toast);
   const server = servers.find((item) => item.id === serverId);
 
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState(TABS.some((item) => item.id === initialTab) ? initialTab : 'overview');
   const [name, setName] = useState(server?.name || '');
   const [icon, setIcon] = useState(server?.icon || null);
   const [accentColor, setAccentColor] = useState(server?.accentColor || '#5865f2');

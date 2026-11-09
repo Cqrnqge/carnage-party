@@ -224,6 +224,10 @@ export function connectSocket(token) {
     useApp.getState().setStreams(streams || []);
   });
 
+  socket.on('watch:update', (payload = {}) => {
+    useApp.getState().applyWatchUpdate(payload);
+  });
+
   socket.on('voice:speaking', ({ channelId, userId, speaking }) => {
     useApp.getState().setSpeaking(channelId, userId, speaking);
   });

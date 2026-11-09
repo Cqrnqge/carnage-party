@@ -7,7 +7,7 @@ import { cx } from '../../utils';
 import Avatar from '../ui/Avatar';
 import ContextMenu from '../ui/ContextMenu';
 
-function MemberRow({ member, server, onMenu }) {
+function MemberRow({ member, server, onMenu, onRoles }) {
   const presence = useApp((state) => state.presence[member.id]);
   const openModal = useApp((state) => state.openModal);
   const status = presence || member.status || 'offline';
@@ -34,6 +34,19 @@ function MemberRow({ member, server, onMenu }) {
           <span className="member-role-label" style={{ color: topRole.color }}>{topRole.name}</span>
         ) : null}
       </div>
+      {onRoles ? (
+        <button
+          className="member-roles-btn icon-btn tiny"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRoles(member);
+          }}
+          title="Назначить роли"
+          aria-label={`Назначить роли: ${member.displayName}`}
+        >
+          <Shield size={14} />
+        </button>
+      ) : null}
       <button
         className="member-more icon-btn tiny"
         onClick={(event) => {
@@ -92,6 +105,16 @@ export default function MemberList({ server, channel, onClose }) {
     setMenu({ x: rect.left, y: rect.bottom + 4, member });
   };
 
+  const openRoles = (member) => {
+    openModal('memberRoles', { serverId: server.id, userId: member.id });
+  };
+
+  const canAssignRoles = (member) =>
+    Boolean(member) &&
+    (canManageRoles || server.ownerId === me?.id) &&
+    member.id !== me?.id &&
+    member.id !== server.ownerId;
+
   const messageMember = async (member) => {
     try {
       const data = await api('/api/dms', { method: 'POST', body: { userId: member.id } });
@@ -118,12 +141,11 @@ export default function MemberList({ server, channel, onClose }) {
               onClick: () => messageMember(menu.member),
             }
           : null,
-        (canManageRoles || server.ownerId === me?.id) && menu.member.id !== me?.id
+        canAssignRoles(menu.member)
           ? {
               label: 'Назначить роли',
               icon: <Shield size={16} />,
-              onClick: () =>
-                openModal('memberRoles', { serverId: server.id, userId: menu.member.id }),
+              onClick: () => openRoles(menu.member),
             }
           : null,
         canKick && menu.member.id !== me?.id && menu.member.id !== server.ownerId
@@ -184,7 +206,13 @@ export default function MemberList({ server, channel, onClose }) {
               <span>{group.members.length}</span>
             </div>
             {group.members.map((member) => (
-              <MemberRow key={member.id} member={member} server={server} onMenu={openMenu} />
+              <MemberRow
+                key={member.id}
+                member={member}
+                server={server}
+                onMenu={openMenu}
+                onRoles={canAssignRoles(member) ? openRoles : null}
+              />
             ))}
           </div>
         ))}

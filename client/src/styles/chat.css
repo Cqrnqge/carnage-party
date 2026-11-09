@@ -1442,13 +1442,28 @@
   font-weight: 600;
 }
 
-.member-more {
+.member-more,
+.member-roles-btn {
   opacity: 0;
   flex: none;
 }
 
-.member-row:hover .member-more {
+.member-row:hover .member-more,
+.member-row:hover .member-roles-btn,
+.member-row:focus-within .member-more,
+.member-row:focus-within .member-roles-btn {
   opacity: 1;
+}
+
+.member-roles-btn:hover {
+  color: var(--accent);
+}
+
+@media (max-width: 900px) {
+  .member-more,
+  .member-roles-btn {
+    opacity: 1;
+  }
 }
 
 /* --------------------------------------------------------------------------

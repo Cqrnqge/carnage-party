@@ -305,6 +305,7 @@ function startServer(options = {}) {
       presence,
       voice,
       streams: streamList(),
+      watch: watchList(userId),
       meta: {
         version: 1,
         demo: true,
@@ -519,6 +520,121 @@ function startServer(options = {}) {
       if (socket.rooms.has(streamRoom(streamId))) socket.disconnect(true);
     }
     broadcastStreams();
+    return true;
+  }
+
+  // ------------------------------------------------------------------
+  // Watch Party — синхронный совместный просмотр
+  // ------------------------------------------------------------------
+  // Комнаты живут только в памяти: это эфемерные встречи, как и эфиры.
+  const watchRooms = new Map();
+  const watchIo = io.of('/watch');
+  const WATCH_CHAT_LIMIT = 100;
+
+  function watchRoomName(roomId) {
+    return `watch:${roomId}`;
+  }
+
+  function youtubeIdFromUrl(value) {
+    try {
+      const url = new URL(String(value || '').trim());
+      const host = url.hostname.replace(/^www\./i, '').toLowerCase();
+      if (host === 'youtu.be') {
+        const id = url.pathname.split('/').filter(Boolean)[0] || '';
+        return /^[a-zA-Z0-9_-]{6,20}$/.test(id) ? id : '';
+      }
+      if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
+        if (url.pathname === '/watch') {
+          const id = url.searchParams.get('v') || '';
+          return /^[a-zA-Z0-9_-]{6,20}$/.test(id) ? id : '';
+        }
+        const match = url.pathname.match(/^\/(?:embed|shorts|live)\/([a-zA-Z0-9_-]{6,20})/);
+        return match ? match[1] : '';
+      }
+    } catch {}
+    return '';
+  }
+
+  function sanitizeWatchSource(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const type = raw.type === 'youtube' ? 'youtube' : raw.type === 'url' ? 'url' : '';
+    const url = String(raw.url || '').trim().slice(0, 2048);
+    if (!type || !/^https?:\/\//i.test(url)) return null;
+    if (type === 'youtube') {
+      const videoId = youtubeIdFromUrl(url);
+      if (!videoId) return null;
+      return {
+        type: 'youtube',
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        videoId,
+        duration: Math.max(0, Math.round(Number(raw.duration) || 0)),
+      };
+    }
+    return {
+      type: 'url',
+      url,
+      videoId: null,
+      duration: Math.max(0, Math.round(Number(raw.duration) || 0)),
+    };
+  }
+
+  function watchParticipants(room) {
+    const list = [];
+    for (const [userId, state] of room.participants.entries()) {
+      const user = db.user(userId);
+      if (!user) continue;
+      list.push({
+        user: ser.publicUser(user),
+        userId,
+        buffering: Boolean(state.buffering),
+        joinedAt: state.joinedAt,
+      });
+    }
+    return list.sort((a, b) => String(a.joinedAt).localeCompare(String(b.joinedAt)));
+  }
+
+  function watchPublic(room) {
+    return {
+      id: room.id,
+      title: room.title,
+      channelId: room.channelId,
+      hostId: room.hostId,
+      host: ser.publicUser(db.user(room.hostId)),
+      source: room.source,
+      state: { ...room.state },
+      participants: room.participants.size,
+      live: Boolean(room.hostSocketId),
+      createdAt: room.createdAt,
+    };
+  }
+
+  function watchList(userId) {
+    return [...watchRooms.values()]
+      .filter((room) => canAccessChannel(userId, db.channel(room.channelId)))
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+      .map(watchPublic);
+  }
+
+  function broadcastWatchUpdate(room, ended = false) {
+    if (!room) return;
+    io.to(channelRoom(room.channelId)).emit('watch:update', {
+      room: ended ? null : watchPublic(room),
+      roomId: room.id,
+      channelId: room.channelId,
+    });
+  }
+
+  function endWatch(roomId, reason = 'ended') {
+    const room = watchRooms.get(roomId);
+    if (!room) return false;
+    if (room.hostTimer) clearTimeout(room.hostTimer);
+    if (room.emptyTimer) clearTimeout(room.emptyTimer);
+    watchRooms.delete(roomId);
+    watchIo.to(watchRoomName(roomId)).emit('watch:ended', { roomId, reason });
+    for (const socket of [...watchIo.sockets.values()]) {
+      if (socket.rooms.has(watchRoomName(roomId))) socket.disconnect(true);
+    }
+    broadcastWatchUpdate(room, true);
     return true;
   }
 
@@ -1810,6 +1926,69 @@ function startServer(options = {}) {
     res.json({ stream: streamPublic(stream) });
   });
 
+  // ------------------------------------------------------------------
+  // Watch Party REST
+  // ------------------------------------------------------------------
+  app.get('/api/watch', auth, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ rooms: watchList(req.user.id) });
+  });
+
+  app.post('/api/watch', auth, (req, res) => {
+    const title = clean(req.body?.title, 80) || 'Смотрим вместе';
+    const channelId = String(req.body?.channelId || '');
+    const channel = db.channel(channelId);
+    if (!channel) return fail(res, 'Канал не найден', 404);
+    if (!canAccessChannel(req.user.id, channel)) return fail(res, 'Нет доступа к каналу', 403);
+
+    const source = sanitizeWatchSource(req.body?.source);
+    if (!source) return fail(res, 'Нужна ссылка на YouTube или прямой видеофайл', 400);
+
+    // В одном канале — одна активная комната, у пользователя — тоже одна.
+    for (const existing of [...watchRooms.values()]) {
+      if (existing.channelId === channelId || existing.hostId === req.user.id) {
+        endWatch(existing.id, 'replaced');
+      }
+    }
+
+    const room = {
+      id: makeId('watch'),
+      hostId: req.user.id,
+      channelId,
+      title,
+      source,
+      state: { playing: false, position: 0, rate: 1, updatedAt: Date.now(), revision: 1 },
+      participants: new Map(),
+      chat: [],
+      queue: [],
+      createdAt: nowIso(),
+      hostSocketId: null,
+      hostTimer: null,
+      emptyTimer: null,
+    };
+    watchRooms.set(room.id, room);
+    broadcastWatchUpdate(room);
+    res.json({ room: watchPublic(room) });
+  });
+
+  app.get('/api/watch/:id', auth, (req, res) => {
+    const room = watchRooms.get(String(req.params.id || ''));
+    if (!room) return fail(res, 'Комната не найдена', 404);
+    if (!canAccessChannel(req.user.id, db.channel(room.channelId))) {
+      return fail(res, 'Нет доступа к комнате', 403);
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ room: watchPublic(room) });
+  });
+
+  app.delete('/api/watch/:id', auth, (req, res) => {
+    const room = watchRooms.get(String(req.params.id || ''));
+    if (!room) return fail(res, 'Комната не найдена', 404);
+    if (room.hostId !== req.user.id) return fail(res, 'Закрыть комнату может только хост', 403);
+    endWatch(room.id, 'stopped');
+    res.json({ ok: true });
+  });
+
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, users: db.data.users.length, messages: db.data.messages.length });
   });
@@ -2200,6 +2379,226 @@ function startServer(options = {}) {
       const target = streamIo.sockets.get(to);
       if (!target || !target.rooms.has(streamRoom(streamId))) return;
       target.emit('stream:signal', { from: socket.id, data: payload.data });
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // Watch Party — состояние комнаты, чат и синхронизация плеера
+  // ------------------------------------------------------------------
+  watchIo.use((socket, next) => {
+    const payload = verifyToken(socket.handshake.auth?.token || '');
+    const user = payload ? db.user(payload.sub) : null;
+    if (!user) return next(new Error('unauthorized'));
+    socket.data.userId = user.id;
+    next();
+  });
+
+  watchIo.on('connection', (socket) => {
+    const userId = socket.data.userId;
+    const roomId = String(socket.handshake.auth?.roomId || '');
+    const room = watchRooms.get(roomId);
+    if (!room) {
+      socket.emit('watch:error', { error: 'Комната не найдена или уже завершилась' });
+      socket.disconnect(true);
+      return;
+    }
+    const channel = db.channel(room.channelId);
+    if (!channel || !canAccessChannel(userId, channel)) {
+      socket.emit('watch:error', { error: 'Нет доступа к комнате' });
+      socket.disconnect(true);
+      return;
+    }
+    if (room.emptyTimer) {
+      clearTimeout(room.emptyTimer);
+      room.emptyTimer = null;
+    }
+
+    const previous = room.participants.get(userId);
+    if (previous?.socketId && previous.socketId !== socket.id) {
+      const oldSocket = watchIo.sockets.get(previous.socketId);
+      if (oldSocket) oldSocket.disconnect(true);
+    }
+    room.participants.set(userId, {
+      socketId: socket.id,
+      buffering: false,
+      joinedAt: previous?.joinedAt || nowIso(),
+    });
+    socket.join(watchRoomName(room.id));
+
+    const isHost = room.hostId === userId;
+    if (isHost) {
+      if (room.hostTimer) {
+        clearTimeout(room.hostTimer);
+        room.hostTimer = null;
+      }
+      if (room.hostSocketId && room.hostSocketId !== socket.id) {
+        const oldHost = watchIo.sockets.get(room.hostSocketId);
+        if (oldHost) oldHost.disconnect(true);
+      }
+      room.hostSocketId = socket.id;
+    }
+
+    const emitParticipants = () => {
+      watchIo.to(watchRoomName(room.id)).emit('watch:participants', {
+        participants: watchParticipants(room),
+        live: Boolean(room.hostSocketId),
+      });
+    };
+
+    socket.emit('watch:state', {
+      room: watchPublic(room),
+      state: room.state,
+      serverNow: Date.now(),
+      participants: watchParticipants(room),
+      chat: room.chat.slice(-WATCH_CHAT_LIMIT),
+      queue: room.queue,
+      self: { userId, host: isHost },
+    });
+    emitParticipants();
+    broadcastWatchUpdate(room);
+
+    socket.on('watch:command', (payload = {}, ack) => {
+      if (room.hostId !== userId) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Управляет хост' });
+        return;
+      }
+      const action = String(payload.action || '');
+      const position = Number(payload.position);
+      const rate = Number(payload.rate);
+      if (action === 'play' || action === 'pause') {
+        room.state.playing = action === 'play';
+        if (Number.isFinite(position)) room.state.position = Math.max(0, position);
+      } else if (action === 'seek') {
+        if (!Number.isFinite(position)) return;
+        room.state.position = Math.max(0, position);
+      } else if (action === 'rate') {
+        if (!Number.isFinite(rate) || rate < 0.25 || rate > 2) return;
+        if (Number.isFinite(position)) room.state.position = Math.max(0, position);
+        room.state.rate = rate;
+      } else {
+        return;
+      }
+      room.state.updatedAt = Date.now();
+      room.state.revision += 1;
+      watchIo.to(watchRoomName(room.id)).emit('watch:sync', {
+        state: room.state,
+        serverNow: Date.now(),
+      });
+      if (typeof ack === 'function') ack({ ok: true, state: room.state });
+    });
+
+    // Ссылку может сменить любой участник комнаты, а не только хост.
+    socket.on('watch:source', (payload = {}, ack) => {
+      const now = Date.now();
+      if (now - (socket.data.lastWatchSourceAt || 0) < 1500) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Слишком часто. Подождите пару секунд.' });
+        return;
+      }
+      const source = sanitizeWatchSource(payload.source);
+      if (!source) {
+        if (typeof ack === 'function') ack({ ok: false, error: 'Нужна ссылка на YouTube, видео или сайт' });
+        return;
+      }
+      socket.data.lastWatchSourceAt = now;
+      room.source = source;
+      room.state = {
+        playing: false,
+        position: 0,
+        rate: 1,
+        updatedAt: now,
+        revision: (Number(room.state?.revision) || 0) + 1,
+      };
+      room.queue = [];
+      watchIo.to(watchRoomName(room.id)).emit('watch:source', {
+        room: watchPublic(room),
+        source: room.source,
+        state: room.state,
+        serverNow: Date.now(),
+      });
+      broadcastWatchUpdate(room);
+      if (typeof ack === 'function') ack({ ok: true, room: watchPublic(room) });
+    });
+
+    socket.on('watch:tick', (payload = {}) => {
+      if (room.hostId !== userId || !room.state.playing) return;
+      const position = Number(payload.position);
+      if (!Number.isFinite(position)) return;
+      room.state.position = Math.max(0, position);
+      room.state.updatedAt = Date.now();
+      room.state.revision += 1;
+      watchIo.to(watchRoomName(room.id)).emit('watch:sync', {
+        state: room.state,
+        serverNow: Date.now(),
+      });
+    });
+
+    socket.on('watch:buffer', (payload = {}) => {
+      const state = room.participants.get(userId);
+      if (!state) return;
+      state.buffering = Boolean(payload.buffering);
+      emitParticipants();
+    });
+
+    socket.on('watch:chat', (payload = {}) => {
+      const text = String(payload.text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+      if (!text) return;
+      const now = Date.now();
+      if (now - (socket.data.lastWatchChatAt || 0) < 500) return;
+      socket.data.lastWatchChatAt = now;
+      const message = {
+        id: `watch_chat_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+        user: ser.publicUser(db.user(userId)),
+        text,
+        at: new Date(now).toISOString(),
+      };
+      room.chat.push(message);
+      if (room.chat.length > WATCH_CHAT_LIMIT) {
+        room.chat.splice(0, room.chat.length - WATCH_CHAT_LIMIT);
+      }
+      watchIo.to(watchRoomName(room.id)).emit('watch:chat', message);
+    });
+
+    socket.on('watch:end', () => {
+      if (room.hostId !== userId) return;
+      endWatch(room.id, 'stopped');
+    });
+
+    const leave = () => {
+      const state = room.participants.get(userId);
+      if (!state || state.socketId !== socket.id) return;
+      room.participants.delete(userId);
+      socket.leave(watchRoomName(room.id));
+      emitParticipants();
+      broadcastWatchUpdate(room);
+      if (!room.participants.size) {
+        if (room.emptyTimer) clearTimeout(room.emptyTimer);
+        room.emptyTimer = setTimeout(() => {
+          if (watchRooms.has(room.id) && !room.participants.size) {
+            endWatch(room.id, 'empty');
+          }
+        }, 10 * 60 * 1000);
+      }
+    };
+
+    socket.on('watch:leave', leave);
+    socket.on('disconnect', () => {
+      leave();
+      if (room.hostId === userId && room.hostSocketId === socket.id) {
+        room.hostSocketId = null;
+        room.state.playing = false;
+        room.state.updatedAt = Date.now();
+        room.state.revision += 1;
+        watchIo.to(watchRoomName(room.id)).emit('watch:sync', {
+          state: room.state,
+          serverNow: Date.now(),
+        });
+        emitParticipants();
+        broadcastWatchUpdate(room);
+        if (room.hostTimer) clearTimeout(room.hostTimer);
+        room.hostTimer = setTimeout(() => {
+          if (!room.hostSocketId && watchRooms.has(room.id)) endWatch(room.id, 'host-left');
+        }, 2 * 60 * 1000);
+      }
     });
   });
 

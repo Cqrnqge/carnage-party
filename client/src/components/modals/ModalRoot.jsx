@@ -17,6 +17,8 @@ import MemberRolesModal from './MemberRolesModal';
 import SearchModal from './SearchModal';
 import ForwardModal from './ForwardModal';
 import StartStreamModal from './StartStreamModal';
+import WatchPartySetupModal from '../watch/WatchPartySetupModal';
+import WatchPartyView from '../watch/WatchPartyView';
 
 export default function ModalRoot() {
   const modal = useApp((state) => state.modal);
@@ -58,6 +60,10 @@ export default function ModalRoot() {
       return <ForwardModal {...props} />;
     case 'startStream':
       return <StartStreamModal {...props} />;
+    case 'watchSetup':
+      return <WatchPartySetupModal {...props} />;
+    case 'watchParty':
+      return <WatchPartyView {...props} />;
     default:
       return null;
   }
