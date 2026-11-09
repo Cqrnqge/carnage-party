@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  AppWindow,
   Camera,
   Check,
   Copy,
@@ -51,12 +52,24 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
   const [screens, setScreens] = useState([]);
   const [screenId, setScreenId] = useState('');
   const [screenError, setScreenError] = useState('');
+  const [sourceTab, setSourceTab] = useState('screen');
   const previewRef = useRef(null);
 
   const canScreen = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getDisplayMedia);
   const desktopScreens = typeof window !== 'undefined' && Boolean(window.desktop?.listScreenSources);
   const wantsBoth = wants.camera && wants.screen;
   const selectedSource = wantsBoth ? 'both' : wants.screen ? 'screen' : 'camera';
+  const monitorSources = screens.filter((source) => source.type !== 'window');
+  const windowSources = screens.filter((source) => source.type === 'window');
+  const activeSources = sourceTab === 'window' ? windowSources : monitorSources;
+
+  const selectSourceTab = (nextTab) => {
+    setSourceTab(nextTab);
+    const list = nextTab === 'window' ? windowSources : monitorSources;
+    if (list.length && !list.some((source) => source.id === screenId)) {
+      setScreenId(list[0].id);
+    }
+  };
 
   // В Electron список мониторов доступен заранее — даём выбрать его
   // прямо в окне запуска, без системного диалога.
@@ -68,11 +81,15 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
       .then((list) => {
         if (cancelled) return;
         const items = Array.isArray(list) ? list.filter((item) => item?.id) : [];
+        const monitors = items.filter((item) => item.type !== 'window');
+        const windows = items.filter((item) => item.type === 'window');
         setScreens(items);
         setScreenError('');
-        setScreenId((prev) =>
-          items.some((item) => item.id === prev) ? prev : items[0]?.id || ''
-        );
+        setSourceTab(monitors.length || !windows.length ? 'screen' : 'window');
+        setScreenId((prev) => {
+          if (items.some((item) => item.id === prev)) return prev;
+          return monitors[0]?.id || windows[0]?.id || '';
+        });
       })
       .catch((err) => {
         if (!cancelled) setScreenError(err?.message || String(err));
@@ -334,37 +351,83 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
               <div className="stream-monitor-block">
                 <div className="stream-step-head stream-step-sub">
                   <span className="stream-step-num">3</span>
-                  <span className="stream-step-label">Монитор</span>
-                  <span className="stream-step-optional">какой экран показываем</span>
+                  <span className="stream-step-label">Монитор или приложение</span>
+                  <span className="stream-step-optional">что показываем</span>
                 </div>
                 {screens.length ? (
-                  <div className="stream-monitor-grid">
-                    {screens.map((screen, index) => (
+                  <>
+                    <div className="stream-source-tabs" role="tablist" aria-label="Тип источника">
                       <button
                         type="button"
-                        key={screen.id}
-                        className={cx('stream-monitor', screenId === screen.id && 'active')}
-                        onClick={() => setScreenId(screen.id)}
+                        role="tab"
+                        aria-selected={sourceTab === 'screen'}
+                        className={cx('stream-source-tab', sourceTab === 'screen' && 'active')}
+                        onClick={() => selectSourceTab('screen')}
                         disabled={busy}
-                        aria-pressed={screenId === screen.id}
                       >
-                        <span className="stream-monitor-thumb">
-                          {screen.thumbnail ? (
-                            <img src={screen.thumbnail} alt="" draggable={false} />
-                          ) : (
-                            <Monitor size={24} />
-                          )}
-                          <span className="stream-monitor-badge">Монитор {index + 1}</span>
-                          {screenId === screen.id ? (
-                            <span className="stream-monitor-check"><Check size={13} /></span>
-                          ) : null}
-                        </span>
-                        <span className="stream-monitor-name">
-                          {screen.name || `Монитор ${index + 1}`}
-                        </span>
+                        <Monitor size={14} />
+                        Экраны
+                        <span>{monitorSources.length}</span>
                       </button>
-                    ))}
-                  </div>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={sourceTab === 'window'}
+                        className={cx('stream-source-tab', sourceTab === 'window' && 'active')}
+                        onClick={() => selectSourceTab('window')}
+                        disabled={busy}
+                      >
+                        <AppWindow size={14} />
+                        Приложения
+                        <span>{windowSources.length}</span>
+                      </button>
+                    </div>
+                    {activeSources.length ? (
+                      <div className="stream-monitor-grid">
+                        {activeSources.map((source) => {
+                          const isWindow = source.type === 'window';
+                          const monitorIndex = monitorSources.indexOf(source);
+                          return (
+                            <button
+                              type="button"
+                              key={source.id}
+                              className={cx('stream-monitor', screenId === source.id && 'active')}
+                              onClick={() => setScreenId(source.id)}
+                              disabled={busy}
+                              aria-pressed={screenId === source.id}
+                            >
+                              <span className="stream-monitor-thumb">
+                                {source.thumbnail ? (
+                                  <img src={source.thumbnail} alt="" draggable={false} />
+                                ) : isWindow ? (
+                                  <AppWindow size={24} />
+                                ) : (
+                                  <Monitor size={24} />
+                                )}
+                                <span className="stream-monitor-badge">
+                                  {isWindow ? 'Приложение' : `Монитор ${monitorIndex + 1}`}
+                                </span>
+                                {screenId === source.id ? (
+                                  <span className="stream-monitor-check"><Check size={13} /></span>
+                                ) : null}
+                              </span>
+                              <span className="stream-monitor-name">
+                                {source.name || (isWindow ? 'Приложение' : `Монитор ${monitorIndex + 1}`)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="stream-monitor-hint">
+                        {sourceTab === 'window'
+                          ? 'Открытых приложений не найдено. Запустите нужную программу и откройте список снова.'
+                          : screenError
+                            ? 'Не удалось получить список мониторов — выберем основной.'
+                            : 'Ищем мониторы…'}
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <div className="stream-monitor-hint">
                     {screenError ? 'Не удалось получить список мониторов — выберем основной.' : 'Ищем мониторы…'}

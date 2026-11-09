@@ -347,16 +347,20 @@ if (!gotLock) {
     setupPtt({ app, ipcMain, getWindow: () => mainWindow });
 
     ipcMain.handle('carnage:screen-sources', async () => {
+      // Показываем и мониторы, и открытые окна приложений — как в обычной
+      // демонстрации экрана, так и при запуске трансляции.
       const sources = await desktopCapturer.getSources({
-        types: ['screen'],
+        types: ['screen', 'window'],
         thumbnailSize: { width: 480, height: 270 },
-        fetchWindowIcons: false,
+        fetchWindowIcons: true,
       });
       return sources.map((source) => ({
         id: source.id,
         name: source.name,
+        type: String(source.id).startsWith('screen:') ? 'screen' : 'window',
         displayId: source.display_id || '',
         thumbnail: source.thumbnail.isEmpty() ? '' : source.thumbnail.toDataURL(),
+        icon: source.appIcon && !source.appIcon.isEmpty() ? source.appIcon.toDataURL() : '',
       }));
     });
 
@@ -368,7 +372,7 @@ if (!gotLock) {
     try {
       session.defaultSession.setDisplayMediaRequestHandler(async (request, callback) => {
         try {
-          const sources = await desktopCapturer.getSources({ types: ['screen'] });
+          const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] });
           const selected = pendingScreenSourceId;
           pendingScreenSourceId = null;
           const source =

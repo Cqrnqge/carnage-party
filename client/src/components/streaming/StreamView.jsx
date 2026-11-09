@@ -9,12 +9,14 @@ import {
   Link2,
   Loader2,
   Maximize2,
+  MessageCircle,
   Monitor,
   MonitorPlay,
   Move,
   Play,
   Radio,
   RotateCw,
+  Send,
   Square,
   Volume2,
   VolumeX,
@@ -132,6 +134,13 @@ export default function StreamView({ streamId }) {
   const stageRef = useRef(null);
   const frameRef = useRef(null);
   const pipDragRef = useRef(null);
+  const chatListRef = useRef(null);
+  const chatDragRef = useRef(null);
+  const watcherRef = useRef(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatText, setChatText] = useState('');
+  const [chatSelf, setChatSelf] = useState(null);
+  const [chatLayout, setChatLayout] = useState(() => streamBroadcaster.getChatLayout());
   const [streamState, setStreamState] = useState('connecting');
   const [error, setError] = useState('');
   const [liveViewers, setLiveViewers] = useState(null);
@@ -144,6 +153,7 @@ export default function StreamView({ streamId }) {
   const [frameBox, setFrameBox] = useState({ left: 0, top: 0, width: 100, height: 100 });
   const elapsed = useElapsed(stream?.createdAt);
   const pipEditor = mine && stream?.source === 'both';
+  const chatEditor = mine;
 
   useEffect(() => {
     setStreamState('connecting');
@@ -152,7 +162,29 @@ export default function StreamView({ streamId }) {
     setMuted(false);
     setLiveViewers(null);
     setCopied(false);
+    setChatMessages([]);
+    setChatText('');
+    setChatSelf(null);
+    setChatLayout(streamBroadcaster.getChatLayout());
   }, [streamId]);
+
+  // Чат эфира: у стримера сообщения приходят через signalling-сокет.
+  useEffect(() => {
+    if (!mine) return undefined;
+    setChatMessages(Array.isArray(streamBroadcaster.chatMessages) ? streamBroadcaster.chatMessages : []);
+    setChatSelf(streamBroadcaster.chatSelf || null);
+    setChatLayout(streamBroadcaster.getChatLayout());
+    return streamBroadcaster.onChat((event, payload) => {
+      if (event === 'history') {
+        setChatMessages(Array.isArray(payload?.messages) ? payload.messages : []);
+        setChatSelf(payload?.self || null);
+      } else if (event === 'message') {
+        setChatMessages((prev) => [...prev.slice(-99), payload]);
+      } else if (event === 'layout' && payload?.layout) {
+        setChatLayout(payload.layout);
+      }
+    });
+  }, [mine, streamId]);
 
   // Локальный предпросмотр собственного эфира. Для режима «экран + камера»
   // основной холст показывает экран, а камера рендерится отдельным окном,
@@ -307,6 +339,17 @@ export default function StreamView({ streamId }) {
       onViewers: (value) => setLiveViewers(Number(value) || 0),
       onInfo: (info) => {
         if (info && typeof info.viewers === 'number') setLiveViewers(info.viewers);
+        if (info?.chatLayout) setChatLayout(info.chatLayout);
+      },
+      onChatHistory: (payload = {}) => {
+        setChatMessages(Array.isArray(payload.messages) ? payload.messages : []);
+        setChatSelf(payload.self || null);
+      },
+      onChat: (message) => {
+        if (message) setChatMessages((prev) => [...prev.slice(-99), message]);
+      },
+      onChatLayout: (layout) => {
+        if (layout) setChatLayout(layout);
       },
       onEnded: () => setStreamState('ended'),
       onError: (message) => {
@@ -314,8 +357,10 @@ export default function StreamView({ streamId }) {
         setStreamState('error');
       },
     });
+    watcherRef.current = watcher;
 
     return () => {
+      watcherRef.current = null;
       watcher?.close();
       const video = videoRef.current;
       if (video) {
@@ -326,6 +371,60 @@ export default function StreamView({ streamId }) {
       }
     };
   }, [mine, streamId, retryKey]);
+
+  useEffect(() => {
+    const list = chatListRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [chatMessages]);
+
+  const beginChatDrag = (event, mode) => {
+    if (!chatEditor) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const stage = stageRef.current;
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const start = { ...chatLayout };
+    chatDragRef.current = { mode };
+
+    const move = (moveEvent) => {
+      if (!chatDragRef.current) return;
+      const dx = (moveEvent.clientX - event.clientX) / rect.width;
+      const dy = (moveEvent.clientY - event.clientY) / rect.height;
+      const next = { ...start };
+      if (mode === 'resize') {
+        next.w = clamp(start.w + dx, 0.16, 0.85);
+        next.h = clamp(start.h + dy, 0.18, 0.88);
+      } else {
+        next.x = clamp(start.x + dx, 0.005, 0.995 - start.w);
+        next.y = clamp(start.y + dy, 0.005, 0.995 - start.h);
+      }
+      streamBroadcaster.setChatLayout(next);
+      setChatLayout(streamBroadcaster.getChatLayout());
+    };
+
+    const finish = () => {
+      chatDragRef.current = null;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+      streamBroadcaster.setChatLayout(streamBroadcaster.getChatLayout(), true);
+    };
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+  };
+
+  const sendChatMessage = (event) => {
+    event?.preventDefault?.();
+    const value = chatText.replace(/\s+/g, ' ').trim().slice(0, 500);
+    if (!value) return;
+    if (mine) streamBroadcaster.sendChat(value);
+    else watcherRef.current?.sendChat(value);
+    setChatText('');
+  };
 
   const resumePlayback = useCallback(async () => {
     const video = videoRef.current;
@@ -514,9 +613,81 @@ export default function StreamView({ streamId }) {
             </div>
           ) : null}
 
-          {pipEditor && !showStatus && !blocked ? (
+          <div
+            className={cx('stream-chat', chatEditor && 'editable')}
+            style={{
+              left: `${chatLayout.x * 100}%`,
+              top: `${chatLayout.y * 100}%`,
+              width: `${chatLayout.w * 100}%`,
+              height: `${chatLayout.h * 100}%`,
+            }}
+          >
+            <div
+              className="stream-chat-head"
+              onPointerDown={chatEditor ? (event) => beginChatDrag(event, 'move') : undefined}
+            >
+              <span className="stream-chat-title">
+                <MessageCircle size={14} /> Чат
+              </span>
+              <span className="stream-chat-self">
+                {chatSelf?.name ? `Вы: ${chatSelf.name}` : mine ? 'Стример' : 'Зритель'}
+              </span>
+              {chatEditor ? (
+                <span className="stream-chat-move" title="Перетащите чат">
+                  <Move size={12} />
+                </span>
+              ) : null}
+            </div>
+            <div className="stream-chat-list" ref={chatListRef}>
+              {chatMessages.length ? (
+                chatMessages.map((message, index) => (
+                  <div
+                    className={cx('stream-chat-msg', message.user?.guest && 'guest')}
+                    key={message.id || `${message.at || ''}-${index}`}
+                  >
+                    <span className="stream-chat-author">{message.user?.name || 'Гость'}</span>
+                    <span className="stream-chat-text">{message.text}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="stream-chat-empty">Пока тихо. Напишите первым!</div>
+              )}
+            </div>
+            <form
+              className="stream-chat-form"
+              onSubmit={sendChatMessage}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <input
+                value={chatText}
+                onChange={(event) => setChatText(event.target.value)}
+                maxLength={500}
+                placeholder="Сообщение в эфир…"
+                aria-label="Сообщение в чат трансляции"
+              />
+              <button type="submit" disabled={!chatText.trim()} aria-label="Отправить сообщение">
+                <Send size={14} />
+              </button>
+            </form>
+            {chatEditor ? (
+              <button
+                type="button"
+                className="stream-chat-resize"
+                aria-label="Изменить размер чата"
+                title="Потяните, чтобы изменить размер чата"
+                onPointerDown={(event) => beginChatDrag(event, 'resize')}
+              >
+                <Maximize2 size={12} />
+              </button>
+            ) : null}
+          </div>
+
+          {chatEditor && !showStatus && !blocked ? (
             <span className="stream-pip-hint">
-              <Move size={13} /> Перетащите камеру · потяните за угол
+              <Move size={13} />
+              {pipEditor
+                ? 'Перетащите камеру и чат · потяните за угол'
+                : 'Перетащите чат · потяните за угол'}
             </span>
           ) : null}
 

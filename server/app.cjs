@@ -423,6 +423,26 @@ function startServer(options = {}) {
     return `stream:${streamId}`;
   }
 
+  const STREAM_CHAT_LIMIT = 100;
+
+  function sanitizeChatLayout(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const number = (value, fallback) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    };
+    const w = Math.min(0.85, Math.max(0.16, number(raw.w, 0.33)));
+    const h = Math.min(0.88, Math.max(0.18, number(raw.h, 0.48)));
+    const x = Math.min(0.995 - w, Math.max(0.005, number(raw.x, 0.64)));
+    const y = Math.min(0.995 - h, Math.max(0.005, number(raw.y, 0.06)));
+    return {
+      x: Number(x.toFixed(4)),
+      y: Number(y.toFixed(4)),
+      w: Number(w.toFixed(4)),
+      h: Number(h.toFixed(4)),
+    };
+  }
+
   function streamPublic(stream) {
     return {
       id: stream.id,
@@ -436,6 +456,7 @@ function startServer(options = {}) {
       owner: ser.publicUser(db.user(stream.hostId)),
       url: stream.mode === 'link' ? stream.publicUrl : null,
       live: Boolean(stream.hostSocketId),
+      chatLayout: stream.chatLayout || null,
     };
   }
 
@@ -1747,6 +1768,8 @@ function startServer(options = {}) {
       hostSocketId: null,
       viewerSockets: new Set(),
       publicUrl,
+      chat: [],
+      chatLayout: null,
     };
     liveStreams.set(id, stream);
     // Если клиент создал эфир, но так и не подключился к сигналингу,
@@ -2080,6 +2103,64 @@ function startServer(options = {}) {
         broadcastStreams();
       });
     }
+
+    // Кто пишет в чат: авторизованный пользователь — под реальным ником,
+    // остальные зрители получают гостевой ник Guest#1234.
+    const tokenPayload = verifyToken(String(auth.token || ''));
+    const account = tokenPayload ? db.user(tokenPayload.sub) : null;
+    let chatUser;
+    if (account) {
+      const pub = ser.publicUser(account);
+      chatUser = {
+        id: pub.id,
+        name: pub.displayName || pub.username || 'Пользователь',
+        avatar: pub.avatar || '',
+        guest: false,
+      };
+    } else {
+      let guestName = String(auth.guestName || '').trim();
+      if (!/^Guest#\d{4}$/.test(guestName)) {
+        guestName = `Guest#${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+      chatUser = { id: `guest-${socket.id}`, name: guestName, avatar: '', guest: true };
+    }
+    socket.data.chatUser = chatUser;
+    socket.data.lastChatAt = 0;
+    if (!Array.isArray(stream.chat)) stream.chat = [];
+    socket.emit('stream:chat-history', {
+      messages: stream.chat.slice(-STREAM_CHAT_LIMIT),
+      self: chatUser,
+    });
+
+    socket.on('stream:chat', (payload = {}) => {
+      const text = String(payload.text || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 500);
+      if (!text) return;
+      const now = Date.now();
+      if (now - (socket.data.lastChatAt || 0) < 600) return;
+      socket.data.lastChatAt = now;
+      const message = {
+        id: `chat_${now.toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+        user: chatUser,
+        text,
+        at: new Date(now).toISOString(),
+      };
+      stream.chat.push(message);
+      if (stream.chat.length > STREAM_CHAT_LIMIT) {
+        stream.chat.splice(0, stream.chat.length - STREAM_CHAT_LIMIT);
+      }
+      streamIo.to(streamRoom(streamId)).emit('stream:chat', message);
+    });
+
+    socket.on('stream:chat-layout', (payload = {}) => {
+      if (role !== 'host') return;
+      const layout = sanitizeChatLayout(payload.layout || payload);
+      if (!layout) return;
+      stream.chatLayout = layout;
+      streamIo.to(streamRoom(streamId)).emit('stream:chat-layout', { layout });
+    });
 
     socket.on('stream:signal', (payload = {}) => {
       const to = String(payload.to || '');

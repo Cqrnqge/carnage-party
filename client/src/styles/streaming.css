@@ -1153,7 +1153,7 @@
 .stream-stage-overlay {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 5;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1206,7 +1206,7 @@
 .stream-unmute-overlay {
   position: absolute;
   inset: 0;
-  z-index: 3;
+  z-index: 5;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1238,6 +1238,176 @@
   color: #fff;
   background: var(--gradient);
   box-shadow: 0 10px 30px rgba(224, 71, 210, 0.4);
+}
+
+/* Чат эфира поверх видео. Стример двигает и растягивает его так же,
+   как окно камеры; зрители видят чат в заданной области. */
+.stream-chat {
+  position: absolute;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  min-height: 118px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(9, 7, 13, 0.78);
+  color: #fff;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+}
+
+.stream-chat.editable {
+  outline: 1px dashed rgba(224, 71, 210, 0.55);
+}
+
+.stream-chat-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.stream-chat.editable .stream-chat-head {
+  cursor: grab;
+  touch-action: none;
+}
+
+.stream-chat.editable .stream-chat-head:active {
+  cursor: grabbing;
+}
+
+.stream-chat-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.stream-chat-self {
+  margin-left: auto;
+  max-width: 62%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 9.5px;
+}
+
+.stream-chat-move {
+  display: flex;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.stream-chat-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 9px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.stream-chat-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.stream-chat-author {
+  color: #f0b3ff;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.stream-chat-msg.guest .stream-chat-author {
+  color: #9fb7d8;
+}
+
+.stream-chat-text {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.stream-chat-empty {
+  margin: auto;
+  padding: 10px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 10.5px;
+  text-align: center;
+}
+
+.stream-chat-form {
+  flex: none;
+  display: flex;
+  gap: 5px;
+  padding: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.stream-chat-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 7px;
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+}
+
+.stream-chat-form input:focus {
+  border-color: rgba(224, 71, 210, 0.55);
+}
+
+.stream-chat-form input::placeholder {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.stream-chat-form button {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  flex: none;
+  border: 0;
+  border-radius: 7px;
+  background: var(--gradient);
+  color: #fff;
+  cursor: pointer;
+}
+
+.stream-chat-form button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.stream-chat-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 9px 0 12px 0;
+  background: linear-gradient(135deg, transparent 28%, rgba(224, 71, 210, 0.55));
+  color: #fff;
+  cursor: nwse-resize;
+  touch-action: none;
 }
 
 .stream-stage-bottom {
@@ -1745,10 +1915,51 @@
   margin-top: 15px;
 }
 
+.stream-source-tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 9px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--bg-2);
+}
+
+.stream-source-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.stream-source-tab span {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 9.5px;
+}
+
+.stream-source-tab:hover:not(:disabled) {
+  color: var(--text-2);
+}
+
+.stream-source-tab.active {
+  background: var(--bg-4);
+  color: var(--text-1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.24);
+}
+
 .stream-monitor-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(164px, 1fr));
   gap: 10px;
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .stream-monitor {
@@ -2224,6 +2435,26 @@
     left: 6px;
     right: 6px;
     bottom: 6px;
+  }
+
+  .stream-chat {
+    left: 8px !important;
+    top: auto !important;
+    bottom: 42px !important;
+    width: calc(100% - 16px) !important;
+    height: 42% !important;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .stream-chat-resize {
+    display: none;
+  }
+
+  .stream-chat-head,
+  .stream-chat-list,
+  .stream-chat-form {
+    font-size: 11px;
   }
 
   .stream-live-pill {

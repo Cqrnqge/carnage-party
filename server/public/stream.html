@@ -182,7 +182,7 @@
       background:
         radial-gradient(700px 420px at 50% 35%, rgba(124, 58, 237, 0.2), transparent 70%),
         #08060b;
-      z-index: 2;
+      z-index: 5;
     }
     .status.hidden { display: none; }
     .status h2 { margin: 0; font-size: clamp(20px, 3vw, 30px); }
@@ -243,7 +243,7 @@
     .sound-hint {
       position: absolute;
       inset: 0;
-      z-index: 4;
+      z-index: 6;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -292,6 +292,132 @@
       pointer-events: none;
     }
     .footer-note b { color: rgba(255, 255, 255, 0.8); font-weight: 600; }
+
+    /* Чат трансляции. Положение задаёт стример из приложения. */
+    .chat {
+      position: absolute;
+      z-index: 4;
+      display: flex;
+      flex-direction: column;
+      min-width: 160px;
+      min-height: 120px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 12px;
+      background: rgba(9, 7, 13, 0.78);
+      color: #fff;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+    }
+    .chat-head {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 9px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .chat-head strong {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .chat-head svg { width: 14px; height: 14px; }
+    .chat-self {
+      margin-left: auto;
+      max-width: 62%;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      color: rgba(255, 255, 255, 0.55);
+      font-size: 9.5px;
+    }
+    .chat-list {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding: 7px 9px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+    .chat-msg {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      font-size: 11.5px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .chat-author {
+      color: #f0b3ff;
+      font-size: 9.5px;
+      font-weight: 700;
+    }
+    .chat-msg.guest .chat-author { color: #9fb7d8; }
+    .chat-text { color: rgba(255, 255, 255, 0.9); }
+    .chat-empty {
+      margin: auto;
+      padding: 10px;
+      color: rgba(255, 255, 255, 0.45);
+      font-size: 10.5px;
+      text-align: center;
+    }
+    .chat-form {
+      flex: none;
+      display: flex;
+      gap: 5px;
+      padding: 6px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(0, 0, 0, 0.22);
+    }
+    .chat-form input {
+      flex: 1;
+      min-width: 0;
+      padding: 6px 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 7px;
+      outline: none;
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+      font: inherit;
+      font-size: 11px;
+    }
+    .chat-form input:focus { border-color: rgba(224, 71, 210, 0.55); }
+    .chat-form input::placeholder { color: rgba(255, 255, 255, 0.38); }
+    .chat-form input:disabled { opacity: 0.5; }
+    .chat-form button {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      flex: none;
+      border: 0;
+      border-radius: 7px;
+      background: linear-gradient(135deg, #ff3d71, #d946ef 55%, #7c3aed);
+      color: #fff;
+      cursor: pointer;
+    }
+    .chat-form button svg { width: 15px; height: 15px; }
+
+    .stage:fullscreen,
+    .stage.fullscreen {
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      background: #000;
+    }
+    .stage:fullscreen #player,
+    .stage.fullscreen #player {
+      width: 100%;
+      height: 100%;
+    }
+    .stage:fullscreen .footer-note,
+    .stage.fullscreen .footer-note { bottom: 16px; }
+
     @media (max-width: 720px) {
       .topbar { padding: 9px 10px; gap: 9px; }
       .brand-text, .divider, .open-app, .viewers span { display: none; }
@@ -300,6 +426,14 @@
       .player-controls { right: 9px; bottom: 9px; }
       .footer-note { display: none; }
       .sound-hint button { padding: 16px 20px; }
+      .chat {
+        left: 8px !important;
+        top: auto !important;
+        bottom: 56px !important;
+        width: calc(100% - 16px) !important;
+        height: 38% !important;
+      }
+      .chat-head, .chat-list, .chat-form { font-size: 12px; }
     }
   </style>
 </head>
@@ -362,6 +496,25 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
         </button>
       </div>
+
+      <div class="chat" id="chat">
+        <div class="chat-head">
+          <strong>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Чат
+          </strong>
+          <span class="chat-self" id="chat-self">Гость</span>
+        </div>
+        <div class="chat-list" id="chat-list">
+          <div class="chat-empty" id="chat-empty">Пока тихо. Напишите первым!</div>
+        </div>
+        <form class="chat-form" id="chat-form">
+          <input id="chat-input" maxlength="500" placeholder="Написать в чат…" autocomplete="off" aria-label="Сообщение в чат трансляции" />
+          <button type="submit" aria-label="Отправить сообщение">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+          </button>
+        </form>
+      </div>
     </main>
   </div>
 
@@ -387,6 +540,12 @@
       var ownerEl = document.getElementById('owner-name');
       var ownerAvatar = document.getElementById('owner-avatar');
       var sourceLabel = document.getElementById('source-label');
+      var chatEl = document.getElementById('chat');
+      var chatListEl = document.getElementById('chat-list');
+      var chatEmptyEl = document.getElementById('chat-empty');
+      var chatFormEl = document.getElementById('chat-form');
+      var chatInputEl = document.getElementById('chat-input');
+      var chatSelfEl = document.getElementById('chat-self');
 
       var socket = null;
       var pc = null;
@@ -395,6 +554,21 @@
       var pendingCandidates = [];
       var ended = false;
       var soundStarted = false;
+      var chatMessages = [];
+      var chatSelf = null;
+
+      var GUEST_KEY = 'carnage_stream_guest_name';
+      var DEFAULT_CHAT_LAYOUT = { x: 0.64, y: 0.06, w: 0.33, h: 0.48 };
+      var guestName = '';
+      var authToken = '';
+      try {
+        guestName = localStorage.getItem(GUEST_KEY) || '';
+        authToken = localStorage.getItem('carnage_token') || '';
+      } catch (err) {}
+      if (!/^Guest#\d{4}$/.test(guestName)) {
+        guestName = 'Guest#' + String(Math.floor(1000 + Math.random() * 9000));
+        try { localStorage.setItem(GUEST_KEY, guestName); } catch (err) {}
+      }
 
       function showStatus(title, text, loading) {
         statusBox.classList.remove('hidden');
@@ -429,7 +603,77 @@
               ? 'демонстрация экрана'
               : 'камера';
         viewersEl.textContent = String(info.viewers || 0);
+        if (info.chatLayout) applyChatLayout(info.chatLayout);
         document.title = (info.title || 'Трансляция') + ' · Carnage Party';
+      }
+
+      function applyChatLayout(layout) {
+        var source = layout || DEFAULT_CHAT_LAYOUT;
+        var number = function (value, fallback) {
+          var parsed = Number(value);
+          return Number.isFinite(parsed) ? parsed : fallback;
+        };
+        var w = Math.min(0.85, Math.max(0.16, number(source.w, DEFAULT_CHAT_LAYOUT.w)));
+        var h = Math.min(0.88, Math.max(0.18, number(source.h, DEFAULT_CHAT_LAYOUT.h)));
+        var x = Math.min(0.995 - w, Math.max(0.005, number(source.x, DEFAULT_CHAT_LAYOUT.x)));
+        var y = Math.min(0.995 - h, Math.max(0.005, number(source.y, DEFAULT_CHAT_LAYOUT.y)));
+        chatEl.style.left = (x * 100) + '%';
+        chatEl.style.top = (y * 100) + '%';
+        chatEl.style.width = (w * 100) + '%';
+        chatEl.style.height = (h * 100) + '%';
+      }
+
+      function setChatSelf(user) {
+        chatSelf = user || null;
+        if (!user) {
+          chatSelfEl.textContent = 'Гость';
+          return;
+        }
+        chatSelfEl.textContent = 'Вы: ' + (user.name || 'Гость');
+        if (user.guest && user.name) {
+          guestName = user.name;
+          try { localStorage.setItem(GUEST_KEY, user.name); } catch (err) {}
+        }
+      }
+
+      function hideChatEmpty() {
+        if (chatEmptyEl && chatEmptyEl.parentNode) chatEmptyEl.parentNode.removeChild(chatEmptyEl);
+        chatEmptyEl = null;
+      }
+
+      function appendChatMessage(message) {
+        if (!message || !message.text) return;
+        hideChatEmpty();
+        chatMessages.push(message);
+        if (chatMessages.length > 100) chatMessages.shift();
+        var row = document.createElement('div');
+        row.className = 'chat-msg' + (message.user && message.user.guest ? ' guest' : '');
+        var author = document.createElement('span');
+        author.className = 'chat-author';
+        author.textContent = (message.user && message.user.name) || 'Гость';
+        var text = document.createElement('span');
+        text.className = 'chat-text';
+        text.textContent = message.text;
+        row.appendChild(author);
+        row.appendChild(text);
+        chatListEl.appendChild(row);
+        while (chatListEl.children.length > 100) chatListEl.removeChild(chatListEl.firstChild);
+        chatListEl.scrollTop = chatListEl.scrollHeight;
+      }
+
+      function renderChatHistory(messages, self) {
+        chatListEl.innerHTML = '';
+        chatMessages = [];
+        chatEmptyEl = null;
+        setChatSelf(self);
+        var list = Array.isArray(messages) ? messages : [];
+        for (var i = 0; i < list.length; i += 1) appendChatMessage(list[i]);
+        if (!list.length) {
+          chatEmptyEl = document.createElement('div');
+          chatEmptyEl.className = 'chat-empty';
+          chatEmptyEl.textContent = 'Пока тихо. Напишите первым!';
+          chatListEl.appendChild(chatEmptyEl);
+        }
       }
 
       function closePeer() {
@@ -450,6 +694,8 @@
         showStatus(title || 'Трансляция завершена', text || 'Стример остановил эфир.', false);
         soundHint.classList.add('hidden');
         stage.classList.remove('playing');
+        chatInputEl.disabled = true;
+        chatInputEl.placeholder = 'Трансляция завершена';
       }
 
       function startSound() {
@@ -472,14 +718,61 @@
         muteLabel.textContent = player.muted ? 'Звук' : 'Выкл. звук';
       });
 
+      chatFormEl.addEventListener('submit', function (event) {
+        event.preventDefault();
+        if (ended || !socket) return;
+        var value = String(chatInputEl.value || '')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 500);
+        if (!value) return;
+        socket.emit('stream:chat', { text: value });
+        chatInputEl.value = '';
+      });
+
+      function fullscreenElement() {
+        return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement || null;
+      }
+
+      function syncFullscreenState() {
+        var active = Boolean(fullscreenElement());
+        stage.classList.toggle('fullscreen', active);
+        fullscreenBtn.title = active ? 'Свернуть' : 'На весь экран';
+      }
+
       fullscreenBtn.addEventListener('click', function () {
         var target = stage;
-        if (document.fullscreenElement) {
-          document.exitFullscreen().catch(function () {});
-        } else if (target.requestFullscreen) {
-          target.requestFullscreen().catch(function () {});
+        var active = fullscreenElement();
+        if (active) {
+          var exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+          if (exit) {
+            try {
+              var result = exit.call(document);
+              if (result && result.catch) result.catch(function () {});
+            } catch (err) {}
+          }
+          return;
+        }
+        var request = target.requestFullscreen || target.webkitRequestFullscreen || target.msRequestFullscreen;
+        if (request) {
+          try {
+            var requestResult = request.call(target, { navigationUI: 'hide' });
+            if (requestResult && requestResult.catch) {
+              requestResult.catch(function () {
+                if (player.webkitEnterFullscreen) player.webkitEnterFullscreen();
+              });
+            }
+          } catch (err) {
+            if (player.webkitEnterFullscreen) player.webkitEnterFullscreen();
+          }
+        } else if (player.webkitEnterFullscreen) {
+          player.webkitEnterFullscreen();
         }
       });
+
+      document.addEventListener('fullscreenchange', syncFullscreenState);
+      document.addEventListener('webkitfullscreenchange', syncFullscreenState);
+      document.addEventListener('MSFullscreenChange', syncFullscreenState);
 
       player.addEventListener('playing', function () {
         if (ended) return;
@@ -564,7 +857,12 @@
           return;
         }
         socket = io('/stream', {
-          auth: { streamId: streamId, role: 'viewer' },
+          auth: {
+            streamId: streamId,
+            role: 'viewer',
+            token: authToken,
+            guestName: guestName,
+          },
           transports: ['websocket', 'polling'],
           reconnection: true,
           reconnectionDelay: 800,
@@ -584,6 +882,17 @@
 
         socket.on('stream:viewers', function (payload) {
           viewersEl.textContent = String((payload && payload.viewers) || 0);
+        });
+
+        socket.on('stream:chat-history', function (payload) {
+          if (!payload) return;
+          renderChatHistory(payload.messages, payload.self);
+        });
+
+        socket.on('stream:chat', appendChatMessage);
+
+        socket.on('stream:chat-layout', function (payload) {
+          if (payload && payload.layout) applyChatLayout(payload.layout);
         });
 
         socket.on('stream:signal', handleSignal);
@@ -607,6 +916,7 @@
         });
       }
 
+      applyChatLayout(DEFAULT_CHAT_LAYOUT);
       connect();
     })();
   </script>

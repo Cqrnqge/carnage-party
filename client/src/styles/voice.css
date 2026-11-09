@@ -906,6 +906,76 @@
   color: #fff;
 }
 
+.screen-picker-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 24px 0;
+}
+
+.screen-picker-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--bg-5);
+}
+
+.screen-picker-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+
+.screen-picker-tab span {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 10px;
+}
+
+.screen-picker-tab:hover {
+  color: var(--text-2);
+}
+
+.screen-picker-tab.active {
+  background: var(--bg-2);
+  color: var(--text-1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.screen-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 210px;
+  padding: 0 10px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-4);
+  color: var(--muted);
+}
+
+.screen-picker-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 12px;
+}
+
 .screen-picker-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -953,6 +1023,19 @@
   display: block;
 }
 
+.screen-source-preview .screen-source-appicon {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 26px;
+  height: 26px;
+  padding: 3px;
+  border-radius: 7px;
+  background: rgba(8, 6, 11, 0.72);
+  object-fit: contain;
+  backdrop-filter: blur(5px);
+}
+
 .screen-source-action {
   position: absolute;
   inset: 0;
@@ -993,6 +1076,16 @@
   text-overflow: ellipsis;
 }
 
+.screen-picker-empty {
+  grid-column: 1 / -1;
+  padding: 26px 18px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+
 .screen-picker-footer {
   display: flex;
   align-items: center;
@@ -1012,6 +1105,14 @@
   .screen-picker-grid {
     grid-template-columns: 1fr;
     padding: 14px;
+  }
+
+  .screen-picker-toolbar {
+    padding: 12px 14px 0;
+  }
+
+  .screen-picker-search {
+    width: 100%;
   }
 
   .screen-picker-header,

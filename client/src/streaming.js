@@ -138,6 +138,8 @@ function stopTracks(stream) {
 
 const PIP_LAYOUT_KEY = 'carnage_stream_pip_layout';
 const DEFAULT_PIP_LAYOUT = { x: 0.72, y: 0.7, w: 0.24 };
+const CHAT_LAYOUT_KEY = 'carnage_stream_chat_layout';
+const DEFAULT_CHAT_LAYOUT = { x: 0.64, y: 0.06, w: 0.33, h: 0.48 };
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
@@ -160,6 +162,29 @@ function readPipLayout() {
     }
   } catch {}
   return { ...DEFAULT_PIP_LAYOUT };
+}
+
+function readChatLayout() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(CHAT_LAYOUT_KEY) || 'null');
+    if (
+      raw &&
+      Number.isFinite(raw.x) &&
+      Number.isFinite(raw.y) &&
+      Number.isFinite(raw.w) &&
+      Number.isFinite(raw.h)
+    ) {
+      const w = clamp(raw.w, 0.16, 0.85);
+      const h = clamp(raw.h, 0.18, 0.88);
+      return {
+        x: clamp(raw.x, 0.005, 0.995 - w),
+        y: clamp(raw.y, 0.005, 0.995 - h),
+        w,
+        h,
+      };
+    }
+  } catch {}
+  return { ...DEFAULT_CHAT_LAYOUT };
 }
 
 function roundedRectPath(context, x, y, width, height, radius) {
@@ -205,6 +230,11 @@ class StreamBroadcaster {
     this.audioContext = null;
     this.audioNodes = [];
     this.pipLayout = readPipLayout();
+    this.chatLayout = readChatLayout();
+    this.chatMessages = [];
+    this.chatSelf = null;
+    this.chatListeners = new Set();
+    this.lastChatLayoutSent = 0;
     this.screenAspect = 16 / 9;
     this.cameraAspect = 16 / 9;
   }
@@ -221,6 +251,8 @@ class StreamBroadcaster {
     channelId = null,
   } = {}) {
     if (this.stream) await this.stop({ silent: true });
+    this.chatMessages = [];
+    this.chatSelf = null;
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('Устройство не поддерживает захват камеры или экрана');
     }
@@ -472,6 +504,54 @@ class StreamBroadcaster {
     }
   }
 
+  getChatLayout() {
+    return { ...this.chatLayout };
+  }
+
+  setChatLayout(next, persist = false) {
+    const current = this.chatLayout || DEFAULT_CHAT_LAYOUT;
+    const width = clamp(Number.isFinite(next?.w) ? next.w : current.w, 0.16, 0.85);
+    const height = clamp(Number.isFinite(next?.h) ? next.h : current.h, 0.18, 0.88);
+    const x = clamp(Number.isFinite(next?.x) ? next.x : current.x, 0.005, 0.995 - width);
+    const y = clamp(Number.isFinite(next?.y) ? next.y : current.y, 0.005, 0.995 - height);
+    this.chatLayout = {
+      x: Number(x.toFixed(4)),
+      y: Number(y.toFixed(4)),
+      w: Number(width.toFixed(4)),
+      h: Number(height.toFixed(4)),
+    };
+    if (persist) {
+      try {
+        localStorage.setItem(CHAT_LAYOUT_KEY, JSON.stringify(this.chatLayout));
+      } catch {}
+    }
+    const now = Date.now();
+    if (this.socket && (persist || now - this.lastChatLayoutSent > 140)) {
+      this.lastChatLayoutSent = now;
+      this.socket.emit('stream:chat-layout', { layout: this.chatLayout });
+    }
+  }
+
+  onChat(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this.chatListeners.add(listener);
+    return () => this.chatListeners.delete(listener);
+  }
+
+  notifyChat(event, payload) {
+    for (const listener of this.chatListeners) {
+      try {
+        listener(event, payload);
+      } catch {}
+    }
+  }
+
+  sendChat(text) {
+    const value = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+    if (!value || !this.socket) return;
+    this.socket.emit('stream:chat', { text: value });
+  }
+
   stopComposite() {
     if (this.compositeTimer) clearInterval(this.compositeTimer);
     this.compositeTimer = null;
@@ -527,6 +607,14 @@ class StreamBroadcaster {
     socket.on('stream:host', ({ stream } = {}) => {
       if (stream) {
         this.stream = { ...this.stream, ...stream, url: this.stream.url };
+        if (stream.chatLayout) {
+          this.chatLayout = { ...stream.chatLayout };
+          this.notifyChat('layout', { layout: this.chatLayout });
+        } else {
+          // У сервера ещё нет раскладки — публикуем локальную, чтобы
+          // зрители увидели чат там, где его расположил стример.
+          this.socket?.emit('stream:chat-layout', { layout: this.chatLayout });
+        }
         useApp.getState().setMyStream(this.stream);
       }
     });
@@ -539,6 +627,24 @@ class StreamBroadcaster {
       if (viewerId) this.closePeer(viewerId);
     });
 
+    socket.on('stream:chat-history', (payload = {}) => {
+      this.chatMessages = Array.isArray(payload.messages) ? payload.messages.slice(-100) : [];
+      this.chatSelf = payload.self || null;
+      this.notifyChat('history', payload);
+    });
+    socket.on('stream:chat', (message) => {
+      if (!message) return;
+      this.chatMessages.push(message);
+      if (this.chatMessages.length > 100) {
+        this.chatMessages.splice(0, this.chatMessages.length - 100);
+      }
+      this.notifyChat('message', message);
+    });
+    socket.on('stream:chat-layout', ({ layout } = {}) => {
+      if (!layout) return;
+      this.chatLayout = { ...layout };
+      this.notifyChat('layout', { layout: this.chatLayout });
+    });
     socket.on('stream:signal', (payload) => this.handleSignal(payload));
     socket.on('stream:viewers', ({ viewers } = {}) => {
       if (!this.stream) return;
@@ -737,7 +843,7 @@ export const streamBroadcaster = new StreamBroadcaster();
 // странице (там своя реализация на чистом JS).
 export function watchStream(streamId, handlers = {}) {
   const socket = io(socketUrl(), {
-    auth: { streamId, role: 'viewer' },
+    auth: { streamId, role: 'viewer', token: getToken() || '' },
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionDelay: 800,
@@ -835,6 +941,15 @@ export function watchStream(streamId, handlers = {}) {
   socket.on('stream:viewers', (payload = {}) => {
     handlers.onViewers?.(Number(payload.viewers) || 0);
   });
+  socket.on('stream:chat-history', (payload = {}) => {
+    handlers.onChatHistory?.(payload);
+  });
+  socket.on('stream:chat', (message) => {
+    if (message) handlers.onChat?.(message);
+  });
+  socket.on('stream:chat-layout', (payload = {}) => {
+    if (payload.layout) handlers.onChatLayout?.(payload.layout);
+  });
   socket.on('stream:signal', handleSignal);
   socket.on('stream:ended', () => {
     if (closed) return;
@@ -861,6 +976,11 @@ export function watchStream(streamId, handlers = {}) {
       socket.disconnect();
       closePeer();
       remote = new MediaStream();
+    },
+    sendChat(text) {
+      const value = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+      if (!value || closed) return;
+      socket.emit('stream:chat', { text: value });
     },
     get hostId() {
       return hostId;
