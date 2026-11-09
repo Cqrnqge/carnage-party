@@ -101,6 +101,9 @@ export const useApp = create((set, get) => ({
   voice: { ...initialVoice },
   incomingCall: null,
 
+  streams: [],
+  myStream: null,
+
   modal: null,
   screenPicker: null,
   toasts: [],
@@ -149,6 +152,11 @@ export const useApp = create((set, get) => ({
       voice = { ...voice, participants };
     }
 
+    const streams = Array.isArray(payload.streams) ? payload.streams : state.streams;
+    const myStream = state.myStream
+      ? streams.find((stream) => stream.id === state.myStream.id) || state.myStream
+      : null;
+
     set({
       user: payload.user || state.user,
       servers,
@@ -162,6 +170,8 @@ export const useApp = create((set, get) => ({
       reads: merge ? { ...state.reads, ...(payload.reads || {}) } : { ...(payload.reads || {}) },
       voiceStates,
       voice,
+      streams,
+      myStream,
       active,
       ready: true,
     });
@@ -191,6 +201,8 @@ export const useApp = create((set, get) => ({
       voiceStates: {},
       voice: { ...initialVoice },
       incomingCall: null,
+      streams: [],
+      myStream: null,
       modal: null,
       toasts: [],
       replyTo: null,
@@ -199,6 +211,21 @@ export const useApp = create((set, get) => ({
   },
 
   setSocketConnected: (connected) => set({ socketConnected: connected }),
+
+  // ------------------------------------------------------------------
+  // Стриминг
+  // ------------------------------------------------------------------
+  setStreams: (streams) => {
+    const list = Array.isArray(streams) ? streams : [];
+    const myStream = get().myStream;
+    const fresh = myStream ? list.find((stream) => stream.id === myStream.id) : null;
+    set({
+      streams: list,
+      myStream: myStream ? (fresh ? { ...myStream, ...fresh, url: myStream.url || fresh.url } : myStream) : null,
+    });
+  },
+
+  setMyStream: (stream) => set({ myStream: stream ? { ...stream } : null }),
 
   // ------------------------------------------------------------------
   // Навигация

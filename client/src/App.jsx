@@ -11,6 +11,9 @@ import HomeSidebar from './components/layout/HomeSidebar';
 import ServerSidebar from './components/layout/ServerSidebar';
 import FriendsView from './components/friends/FriendsView';
 import ChatArea from './components/chat/ChatArea';
+import StreamingView from './components/streaming/StreamingView';
+import StreamView from './components/streaming/StreamView';
+import StreamingSidebar from './components/layout/StreamingSidebar';
 import ModalRoot from './components/modals/ModalRoot';
 import Toasts from './components/ui/Toasts';
 import { BrandMark } from './components/ui/Avatar';
@@ -58,6 +61,7 @@ export default function App() {
   const servers = useApp((state) => state.servers);
   const channels = useApp((state) => state.channels);
   const dms = useApp((state) => state.dms);
+  const streams = useApp((state) => state.streams);
   const unread = useApp((state) => state.unread);
   const mentions = useApp((state) => state.mentions);
   const settings = useApp((state) => state.settings);
@@ -153,6 +157,7 @@ export default function App() {
   const channel = active?.type === 'channel' ? selectChannel({ channels, dms }, active.id) : null;
   const server = channel?.serverId ? servers.find((item) => item.id === channel.serverId) : null;
   const isHome = active?.type === 'friends' || (active?.type === 'channel' && channel?.type === 'dm');
+  const isStreaming = active?.type === 'streaming' || active?.type === 'stream';
 
   useEffect(() => {
     if (!ready) return;
@@ -201,6 +206,15 @@ export default function App() {
 
   useEffect(() => {
     const base = 'Carnage Party';
+    if (active?.type === 'stream') {
+      const stream = (streams || []).find((item) => item.id === active.id);
+      document.title = stream?.title ? `${stream.title} · ${base}` : `Трансляция · ${base}`;
+      return;
+    }
+    if (active?.type === 'streaming') {
+      document.title = `Streaming · ${base}`;
+      return;
+    }
     if (!channel) {
       document.title = unreadTotal ? `(${unreadTotal}) ${base}` : base;
       return;
@@ -210,7 +224,7 @@ export default function App() {
         ? channel.name || (channel.members || []).filter((member) => member.id !== user?.id).map((member) => member.displayName).join(', ')
         : `#${channel.name}`;
     document.title = unreadTotal ? `(${unreadTotal}) ${name} · ${base}` : `${name} · ${base}`;
-  }, [channel, unreadTotal, user?.id]);
+  }, [channel, unreadTotal, user?.id, active?.type, active?.id, streams]);
 
   useEffect(() => {
     if (mentionTotal > 0 && settings.notifications) {
@@ -253,7 +267,7 @@ export default function App() {
       <PushToTalk />
       <div className={cx('app-nav', mobilePanel === 'nav' && 'open')}>
         <ServerRail />
-        {isHome || !server ? <HomeSidebar /> : <ServerSidebar />}
+        {isStreaming ? <StreamingSidebar /> : isHome || !server ? <HomeSidebar /> : <ServerSidebar />}
       </div>
       {mobile && mobilePanel ? (
         <button
@@ -264,7 +278,11 @@ export default function App() {
         />
       ) : null}
       <main className="app-main">
-        {active?.type === 'friends' ? (
+        {active?.type === 'streaming' ? (
+          <StreamingView />
+        ) : active?.type === 'stream' ? (
+          <StreamView streamId={active.id} />
+        ) : active?.type === 'friends' ? (
           <FriendsView />
         ) : channel ? (
           <ChatArea channel={channel} server={server} />

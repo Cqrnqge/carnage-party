@@ -12,6 +12,7 @@ import {
   Paperclip,
   Phone,
   Pin,
+  Radio,
   Search,
   Settings,
   UserPlus,
@@ -29,6 +30,7 @@ import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import MemberList from './MemberList';
 import VoiceStage from '../voice/VoiceStage';
+import ChannelStreamBanner from '../streaming/ChannelStreamBanner';
 import { voiceManager } from '../../voice';
 import { useMobileClient } from '../../mobile';
 
@@ -314,6 +316,18 @@ export default function ChatArea({ channel, server }) {
         </div>
 
         <div className="chat-header-actions">
+          {isVoice ? (
+            <button
+              className="icon-btn"
+              onClick={() =>
+                openModal('startStream', { channelId: channel.id, channelName: channel.name })
+              }
+              title="Начать трансляцию в канале"
+              aria-label="Начать трансляцию в канале"
+            >
+              <Radio size={19} />
+            </button>
+          ) : null}
           {isDm && other ? (
             <button
               className="icon-btn mobile-hide"
@@ -414,6 +428,7 @@ export default function ChatArea({ channel, server }) {
 
       <div className="chat-content">
         <div className={cx('chat-main', stageOpen && 'chat-main-voice')}>
+          <ChannelStreamBanner channelId={channel.id} />
           {voiceRoom ? (
             <div className="voice-room-tabs">
               <div className="voice-room-tab-group">

@@ -1,5 +1,12 @@
 'use strict';
 
+// UTF-8 для русских логов в Windows-консоли.
+if (process.platform === 'win32' && process.stdout.isTTY) {
+  try {
+    require('child_process').execFileSync('chcp.com', ['65001'], { stdio: 'ignore', windowsHide: true });
+  } catch {}
+}
+
 const path = require('path');
 const net = require('net');
 const { spawn } = require('child_process');

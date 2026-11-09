@@ -4,6 +4,7 @@
 )
 
 $ErrorActionPreference = 'Stop'
+$OutputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $mobileDir = $PSScriptRoot
 $root = Split-Path -Parent $mobileDir
 Set-Location $root
@@ -47,7 +48,7 @@ Write-Host "Java: $javaHome"
 
 Write-Step "Версия и адрес сервера"
 if (-not $Version) {
-    $package = Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
+    $package = Get-Content (Join-Path $root 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     $Version = $package.version
 }
 $versionParts = $Version.Split('.')
@@ -56,7 +57,7 @@ $versionCode = [int]$versionParts[0] * 10000 + [int]$versionParts[1] * 100 + [in
 # Синхронизируем манифест с версией из package.json, чтобы versionCode
 # всегда увеличивался и Android предлагал обновление.
 $manifestPath = Join-Path $mobileDir 'AndroidManifest.xml'
-$manifest = Get-Content $manifestPath -Raw
+$manifest = Get-Content $manifestPath -Raw -Encoding UTF8
 $manifest = [Regex]::Replace($manifest, 'android:versionCode="[^"]*"', "android:versionCode=`"$versionCode`"")
 $manifest = [Regex]::Replace($manifest, 'android:versionName="[^"]*"', "android:versionName=`"$Version`"")
 [IO.File]::WriteAllText($manifestPath, $manifest, (New-Object System.Text.UTF8Encoding($false)))
@@ -67,7 +68,7 @@ if (-not $ServerUrl) {
 if (-not $ServerUrl) {
     $defaultServerFile = Join-Path $root 'electron\default-server.txt'
     if (Test-Path $defaultServerFile) {
-        $ServerUrl = (Get-Content $defaultServerFile -Raw).Trim()
+        $ServerUrl = (Get-Content $defaultServerFile -Raw -Encoding UTF8).Trim()
     }
 }
 if (-not $ServerUrl) {

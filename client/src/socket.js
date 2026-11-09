@@ -220,6 +220,10 @@ export function connectSocket(token) {
     useApp.getState().handleVoiceState(payload);
   });
 
+  socket.on('streams:update', ({ streams } = {}) => {
+    useApp.getState().setStreams(streams || []);
+  });
+
   socket.on('voice:speaking', ({ channelId, userId, speaking }) => {
     useApp.getState().setSpeaking(channelId, userId, speaking);
   });

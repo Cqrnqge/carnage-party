@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
-import { Compass, MessageSquare, Search, Settings } from 'lucide-react';
+import { Compass, MessageSquare, Radio, Search, Settings } from 'lucide-react';
 import { useApp, selectChannel } from '../../store';
 import { cx } from '../../utils';
 
 export default function MobileTabBar() {
   const active = useApp((state) => state.active);
   const channels = useApp((state) => state.channels);
+  const streams = useApp((state) => state.streams);
   const unread = useApp((state) => state.unread);
   const mentions = useApp((state) => state.mentions);
   const setActive = useApp((state) => state.setActive);
@@ -20,6 +21,10 @@ export default function MobileTabBar() {
   const mentionTotal = useMemo(
     () => Object.values(mentions || {}).reduce((sum, value) => sum + (Number(value) || 0), 0),
     [mentions]
+  );
+  const liveTotal = useMemo(
+    () => (streams || []).filter((stream) => stream.live !== false).length,
+    [streams]
   );
 
   const openChats = () => {
@@ -52,6 +57,23 @@ export default function MobileTabBar() {
       >
         <span className="mobile-tab-icon"><Compass size={21} /></span>
         <span>Серверы</span>
+      </button>
+
+      <button
+        type="button"
+        className={cx('mobile-tab', (active?.type === 'streaming' || active?.type === 'stream') && 'active')}
+        onClick={() => {
+          setActive({ type: 'streaming' });
+          setMobilePanel(null);
+        }}
+      >
+        <span className="mobile-tab-icon">
+          <Radio size={21} />
+          {liveTotal > 0 ? (
+            <span className="mobile-tab-badge mention">{liveTotal > 9 ? '9+' : liveTotal}</span>
+          ) : null}
+        </span>
+        <span>Стримы</span>
       </button>
 
       <button type="button" className="mobile-tab" onClick={() => openModal('search')}>

@@ -17,6 +17,7 @@ export default function ServerSidebar() {
   const voice = useApp((state) => state.voice);
   const unread = useApp((state) => state.unread);
   const mentions = useApp((state) => state.mentions);
+  const streams = useApp((state) => state.streams);
   const user = useApp((state) => state.user);
   const setActive = useApp((state) => state.setActive);
   const openModal = useApp((state) => state.openModal);
@@ -40,6 +41,12 @@ export default function ServerSidebar() {
   const list = channels
     .filter((c) => c.serverId === server.id)
     .sort((a, b) => (a.position || 0) - (b.position || 0));
+
+  const liveChannelIds = new Set(
+    (streams || [])
+      .filter((stream) => stream.live !== false && stream.channelId)
+      .map((stream) => stream.channelId)
+  );
 
   const categories = [];
   const byCategory = new Map();
@@ -181,6 +188,7 @@ export default function ServerSidebar() {
                     const mentionCount = mentions[item.id] || 0;
                     const participants = voiceStates[item.id] || [];
                     const connected = voice.channelId === item.id && voice.joined;
+                    const hasStream = liveChannelIds.has(item.id);
                     return (
                       <div key={item.id}>
                         <button
@@ -188,7 +196,8 @@ export default function ServerSidebar() {
                             'channel-row',
                             isActive && 'active',
                             count > 0 && 'unread',
-                            item.type === 'voice' && connected && 'voice-connected'
+                            item.type === 'voice' && connected && 'voice-connected',
+                            hasStream && 'has-stream'
                           )}
                           onClick={() => {
                             if (item.type === 'voice') joinVoice(item);
@@ -201,6 +210,12 @@ export default function ServerSidebar() {
                         >
                           {item.type === 'voice' ? <Volume2 size={18} /> : <Hash size={18} />}
                           <span className="channel-name">{item.name}</span>
+                          {hasStream ? (
+                            <span
+                              className="channel-live-dot"
+                              title="В канале идёт трансляция"
+                            />
+                          ) : null}
                           {mentionCount > 0 ? (
                             <span className="channel-badge mention-badge">{mentionCount}</span>
                           ) : count > 0 ? (

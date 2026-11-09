@@ -22,6 +22,11 @@ function DmRow({ channel }) {
   const mentions = useApp((state) => state.mentions[channel.id] || 0);
   const setActive = useApp((state) => state.setActive);
   const setMobilePanel = useApp((state) => state.setMobilePanel);
+  const hasStream = useApp((state) =>
+    (state.streams || []).some(
+      (stream) => stream.live !== false && stream.channelId === channel.id
+    )
+  );
   const isActive = active?.type === 'channel' && active.id === channel.id;
   const other = dmOther(channel, user?.id);
   const isGroup = (channel.members || []).length > 2;
@@ -47,7 +52,11 @@ function DmRow({ channel }) {
         ) : (
           <Avatar user={other} size={36} showStatus status={status} />
         )}
-        {unread > 0 && !isActive ? <span className="dm-unread-dot" /> : null}
+        {hasStream ? (
+          <span className="dm-live-dot" title="Идёт трансляция" />
+        ) : unread > 0 && !isActive ? (
+          <span className="dm-unread-dot" />
+        ) : null}
       </div>
       <div className="dm-text">
         <div className="dm-top">

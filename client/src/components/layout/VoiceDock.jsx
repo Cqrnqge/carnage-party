@@ -10,6 +10,7 @@ export default function VoiceDock() {
   const voice = useApp((state) => state.voice);
   const channels = useApp((state) => state.channels);
   const dms = useApp((state) => state.dms);
+  const streams = useApp((state) => state.streams);
   const user = useApp((state) => state.user);
   const setVoice = useApp((state) => state.setVoice);
   const setActive = useApp((state) => state.setActive);
@@ -20,6 +21,9 @@ export default function VoiceDock() {
   const title = channel.type === 'dm' ? dmTitle(channel, user?.id) : channel.name;
   const isDm = channel.type === 'dm';
   const hasScreen = Boolean(voice.screen) || (voice.participants || []).some((p) => p.screen);
+  const hasChannelStream = (streams || []).some(
+    (stream) => stream.live !== false && stream.channelId === voice.channelId
+  );
   const participants = [user, ...(voice.participants || []).map((p) => p.user)].filter(Boolean);
 
   return (
@@ -41,16 +45,28 @@ export default function VoiceDock() {
         <div className="voice-dock-actions">
           {voice.joined ? (
             <button
-              className={cx('icon-btn', hasScreen && 'live')}
+              className={cx('icon-btn', (hasScreen || hasChannelStream) && 'live')}
               onClick={() => {
                 setActive({ type: 'channel', id: voice.channelId });
                 setVoice({ stageOpen: true });
               }}
-              title={hasScreen ? 'Открыть трансляцию' : 'Открыть комнату'}
-              aria-label={hasScreen ? 'Открыть трансляцию' : 'Открыть комнату'}
+              title={
+                hasChannelStream
+                  ? 'Открыть трансляцию канала'
+                  : hasScreen
+                    ? 'Открыть трансляцию'
+                    : 'Открыть комнату'
+              }
+              aria-label={
+                hasChannelStream
+                  ? 'Открыть трансляцию канала'
+                  : hasScreen
+                    ? 'Открыть трансляцию'
+                    : 'Открыть комнату'
+              }
             >
-              {hasScreen ? <Monitor size={15} /> : <Maximize2 size={15} />}
-              {hasScreen ? <span className="voice-dock-live-dot" /> : null}
+              {hasScreen || hasChannelStream ? <Monitor size={15} /> : <Maximize2 size={15} />}
+              {hasScreen || hasChannelStream ? <span className="voice-dock-live-dot" /> : null}
             </button>
           ) : null}
           <button

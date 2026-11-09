@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Compass, Plus } from 'lucide-react';
+import { Compass, Plus, Radio } from 'lucide-react';
 import { useApp, selectChannel } from '../../store';
 import { serverUnread, serverMentions } from '../../store';
 import { BrandMark, ServerIcon } from '../ui/Avatar';
@@ -30,6 +30,7 @@ export default function ServerRail() {
   const active = useApp((state) => state.active);
   const unread = useApp((state) => state.unread);
   const mentions = useApp((state) => state.mentions);
+  const streams = useApp((state) => state.streams);
   const setActive = useApp((state) => state.setActive);
   const openModal = useApp((state) => state.openModal);
   const [lastChannels, setLastChannels] = useState(readLastChannels);
@@ -43,6 +44,11 @@ export default function ServerRail() {
       setLastChannels((prev) => ({ ...prev, [activeChannel.serverId]: activeChannel.id }));
     }
   }, [activeChannel?.id, activeChannel?.serverId]);
+
+  const liveCount = useMemo(
+    () => (streams || []).filter((stream) => stream.live !== false).length,
+    [streams]
+  );
 
   const totals = useMemo(() => {
     const map = {};
@@ -68,7 +74,7 @@ export default function ServerRail() {
 
   return (
     <nav className="server-rail" aria-label="Серверы">
-      <div className="rail-home">
+      <div className="rail-home rail-home-stack">
         <button
           className={cx('rail-item rail-home-btn', active?.type === 'friends' && 'active')}
           data-tooltip="Личные сообщения"
@@ -76,6 +82,22 @@ export default function ServerRail() {
           aria-label="Личные сообщения"
         >
           <BrandMark size={48} />
+        </button>
+        <button
+          className={cx(
+            'rail-item rail-streaming-btn',
+            (active?.type === 'streaming' || active?.type === 'stream') && 'active'
+          )}
+          data-tooltip="Streaming"
+          onClick={() => setActive({ type: 'streaming' })}
+          aria-label="Streaming"
+        >
+          <span className="rail-streaming-icon">
+            <Radio size={23} />
+          </span>
+          {liveCount > 0 ? (
+            <span className="rail-badge rail-live-badge">{liveCount > 9 ? '9+' : liveCount}</span>
+          ) : null}
         </button>
       </div>
       <div className="rail-separator" />

@@ -1,5 +1,13 @@
 'use strict';
 
+// Windows-консоль по умолчанию работает в cp866, из-за чего русские
+// сообщения сервера превращаются в «кракозябры». Переключаем её на UTF-8.
+if (process.platform === 'win32' && process.stdout.isTTY) {
+  try {
+    require('child_process').execFileSync('chcp.com', ['65001'], { stdio: 'ignore', windowsHide: true });
+  } catch {}
+}
+
 const path = require('path');
 const { startServer } = require('./app.cjs');
 const { lanAddresses, vpnAddresses } = require('./network.cjs');

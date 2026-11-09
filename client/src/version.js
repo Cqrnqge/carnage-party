@@ -15,5 +15,5 @@ export function appVersion() {
       return __CARNAGE_VERSION__;
     }
   } catch {}
-  return '1.1.3';
+  return '1.1.5';
 }

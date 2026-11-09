@@ -16,6 +16,7 @@ import BanMemberModal from './BanMemberModal';
 import MemberRolesModal from './MemberRolesModal';
 import SearchModal from './SearchModal';
 import ForwardModal from './ForwardModal';
+import StartStreamModal from './StartStreamModal';
 
 export default function ModalRoot() {
   const modal = useApp((state) => state.modal);
@@ -55,6 +56,8 @@ export default function ModalRoot() {
       return <SearchModal {...props} />;
     case 'forward':
       return <ForwardModal {...props} />;
+    case 'startStream':
+      return <StartStreamModal {...props} />;
     default:
       return null;
   }

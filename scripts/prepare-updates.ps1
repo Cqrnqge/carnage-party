@@ -3,11 +3,12 @@
 )
 
 $ErrorActionPreference = 'Stop'
+$OutputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 if (-not $Version) {
-    $package = Get-Content (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
+    $package = Get-Content (Join-Path $root 'package.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     $Version = $package.version
 }
 

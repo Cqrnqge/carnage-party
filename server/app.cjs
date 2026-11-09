@@ -304,6 +304,7 @@ function startServer(options = {}) {
       reads,
       presence,
       voice,
+      streams: streamList(),
       meta: {
         version: 1,
         demo: true,
@@ -408,6 +409,82 @@ function startServer(options = {}) {
       channelId,
       participants: voiceParticipants(channelId),
     });
+  }
+
+  // ------------------------------------------------------------------
+  // Стриминг
+  // ------------------------------------------------------------------
+  // Живые трансляции хранятся только в памяти: это эфемерные комнаты.
+  // hostSocketId появляется, когда стример подключается к /stream.
+  const liveStreams = new Map();
+  const streamIo = io.of('/stream');
+
+  function streamRoom(streamId) {
+    return `stream:${streamId}`;
+  }
+
+  function streamPublic(stream) {
+    return {
+      id: stream.id,
+      title: stream.title,
+      mode: stream.mode,
+      source: stream.source,
+      createdAt: stream.createdAt,
+      viewers: stream.viewerSockets.size,
+      preview: stream.preview || null,
+      channelId: stream.channelId || null,
+      owner: ser.publicUser(db.user(stream.hostId)),
+      url: stream.mode === 'link' ? stream.publicUrl : null,
+      live: Boolean(stream.hostSocketId),
+    };
+  }
+
+  function streamList() {
+    // В список попадают и эфиры, которые ждут переподключения стримера:
+    // клиент показывает их как «переподключение», а по таймеру сервер
+    // окончательно завершает такие трансляции.
+    return [...liveStreams.values()]
+      .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+      .map(streamPublic);
+  }
+
+  function clearStreamCleanup(stream) {
+    if (!stream?.hostOfflineTimer) return;
+    clearTimeout(stream.hostOfflineTimer);
+    stream.hostOfflineTimer = null;
+  }
+
+  function armStreamCleanup(stream, delay) {
+    if (!stream) return;
+    clearStreamCleanup(stream);
+    stream.hostOfflineTimer = setTimeout(() => {
+      stream.hostOfflineTimer = null;
+      if (!stream.hostSocketId) endStream(stream.id, 'host-left');
+    }, delay);
+  }
+
+  function broadcastStreams() {
+    io.emit('streams:update', { streams: streamList() });
+  }
+
+  function broadcastStreamViewers(stream) {
+    streamIo.to(streamRoom(stream.id)).emit('stream:viewers', {
+      streamId: stream.id,
+      viewers: stream.viewerSockets.size,
+    });
+  }
+
+  function endStream(streamId, reason = 'ended') {
+    const stream = liveStreams.get(streamId);
+    if (!stream) return false;
+    clearStreamCleanup(stream);
+    liveStreams.delete(streamId);
+    streamIo.to(streamRoom(streamId)).emit('stream:ended', { streamId, reason });
+    for (const socket of [...streamIo.sockets.values()]) {
+      if (socket.rooms.has(streamRoom(streamId))) socket.disconnect(true);
+    }
+    broadcastStreams();
+    return true;
   }
 
   // ------------------------------------------------------------------
@@ -1618,6 +1695,82 @@ function startServer(options = {}) {
     })
   );
 
+  // ------------------------------------------------------------------
+  // API стриминга
+  // ------------------------------------------------------------------
+  app.get('/api/streams', auth, (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ streams: streamList() });
+  });
+
+  app.post('/api/streams', auth, (req, res) => {
+    const title = clean(req.body?.title, 80) || 'Трансляция';
+    const mode = req.body?.mode === 'link' ? 'link' : 'app';
+    const requestedSource = req.body?.source;
+    const source =
+      requestedSource === 'screen' || requestedSource === 'both'
+        ? requestedSource
+        : 'camera';
+
+    // Эфир можно запустить прямо из голосового канала — тогда он
+    // закрепляется за каналом и виден его участникам.
+    const requestedChannelId = req.body?.channelId ? String(req.body.channelId) : '';
+    let channelId = null;
+    if (requestedChannelId) {
+      const channel = db.channel(requestedChannelId);
+      if (!channel) return fail(res, 'Канал не найден', 404);
+      const allowed = accessibleChannels(req.user.id).some((item) => item.id === channel.id);
+      if (!allowed) return fail(res, 'Нет доступа к этому каналу', 403);
+      channelId = channel.id;
+    }
+
+    // Один пользователь — одна трансляция. Новый эфир заменяет старый.
+    for (const existing of [...liveStreams.values()]) {
+      if (existing.hostId === req.user.id) endStream(existing.id, 'restart');
+    }
+
+    const id = makeId('stream');
+    const forwardedProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+    const protocol = forwardedProto || req.protocol || 'http';
+    const host = req.get('host') || 'localhost:3001';
+    const publicUrl = `${protocol}://${host}/stream/${id}`;
+    const stream = {
+      id,
+      hostId: req.user.id,
+      title,
+      mode,
+      source,
+      channelId,
+      createdAt: nowIso(),
+      preview: null,
+      lastPreviewAt: 0,
+      hostSocketId: null,
+      viewerSockets: new Set(),
+      publicUrl,
+    };
+    liveStreams.set(id, stream);
+    // Если клиент создал эфир, но так и не подключился к сигналингу,
+    // не держим «призрачную» трансляцию в реестре.
+    armStreamCleanup(stream, 30000);
+    res.json({ stream: streamPublic(stream), url: publicUrl });
+  });
+
+  app.delete('/api/streams/:id', auth, (req, res) => {
+    const stream = liveStreams.get(String(req.params.id || ''));
+    if (!stream) return fail(res, 'Трансляция не найдена', 404);
+    if (stream.hostId !== req.user.id) return fail(res, 'Это не ваша трансляция', 403);
+    endStream(stream.id, 'stopped');
+    res.json({ ok: true });
+  });
+
+  // Публичная информация для страницы просмотра в браузере.
+  app.get('/api/streams/:id/public', (req, res) => {
+    const stream = liveStreams.get(String(req.params.id || ''));
+    if (!stream) return fail(res, 'Трансляция не найдена', 404);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ stream: streamPublic(stream) });
+  });
+
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, users: db.data.users.length, messages: db.data.messages.length });
   });
@@ -1809,6 +1962,22 @@ function startServer(options = {}) {
       });
     });
 
+    // Небольшой JPEG-кадр для карточки трансляции в разделе «Стриминг».
+    socket.on('stream:preview', (payload = {}) => {
+      const stream = [...liveStreams.values()].find(
+        (item) => item.hostId === userId && item.hostSocketId
+      );
+      if (!stream) return;
+      const preview = String(payload.preview || '');
+      if (!/^data:image\/jpeg;base64,[a-z0-9+/=]+$/i.test(preview)) return;
+      if (preview.length > 190_000) return;
+      const now = Date.now();
+      if (now - (stream.lastPreviewAt || 0) < 3000) return;
+      stream.lastPreviewAt = now;
+      stream.preview = preview;
+      broadcastStreams();
+    });
+
     socket.on('call:invite', (payload = {}) => {
       const channel = db.channel(String(payload.channelId || ''));
       if (!channel || channel.type !== 'dm' || !channel.memberIds.includes(userId)) return;
@@ -1841,6 +2010,93 @@ function startServer(options = {}) {
           broadcastPresence(userId);
         }
       }
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // WebRTC-сигналинг трансляций (публичная страница и клиент)
+  // ------------------------------------------------------------------
+  streamIo.on('connection', (socket) => {
+    const auth = socket.handshake.auth || {};
+    const streamId = String(auth.streamId || '');
+    const stream = liveStreams.get(streamId);
+    if (!stream) {
+      socket.emit('stream:error', { error: 'Трансляция не найдена или уже завершилась' });
+      socket.disconnect(true);
+      return;
+    }
+
+    const role = auth.role === 'host' ? 'host' : 'viewer';
+    if (role === 'host') {
+      const payload = verifyToken(String(auth.token || ''));
+      const user = payload ? db.user(payload.sub) : null;
+      if (!user || user.id !== stream.hostId) {
+        socket.emit('stream:error', { error: 'Нет прав на эту трансляцию' });
+        socket.disconnect(true);
+        return;
+      }
+      // Если стример переподключился, старый сокет больше не нужен.
+      if (stream.hostSocketId && stream.hostSocketId !== socket.id) {
+        const previous = streamIo.sockets.get(stream.hostSocketId);
+        if (previous) previous.disconnect(true);
+      }
+      stream.hostSocketId = socket.id;
+      clearStreamCleanup(stream);
+      socket.join(streamRoom(streamId));
+      socket.emit('stream:host', { stream: streamPublic(stream) });
+      // Стример мог подключиться позже зрителей — знакомим его с ними.
+      for (const viewerId of stream.viewerSockets) {
+        socket.emit('stream:viewer', { viewerId });
+      }
+      broadcastStreams();
+
+      socket.on('disconnect', () => {
+        if (stream.hostSocketId !== socket.id) return;
+        stream.hostSocketId = null;
+        if (!liveStreams.has(streamId)) return;
+        // Даём стримеру 15 секунд на переподключение, не разрывая зрителей.
+        broadcastStreams();
+        armStreamCleanup(stream, 15000);
+      });
+    } else {
+      stream.viewerSockets.add(socket.id);
+      socket.join(streamRoom(streamId));
+      socket.emit('stream:ready', {
+        stream: streamPublic(stream),
+        hostId: stream.hostSocketId || null,
+      });
+      if (stream.hostSocketId) {
+        streamIo.to(stream.hostSocketId).emit('stream:viewer', { viewerId: socket.id });
+      }
+      broadcastStreams();
+      broadcastStreamViewers(stream);
+
+      socket.on('disconnect', () => {
+        stream.viewerSockets.delete(socket.id);
+        if (stream.hostSocketId) {
+          streamIo.to(stream.hostSocketId).emit('stream:viewer-left', { viewerId: socket.id });
+        }
+        broadcastStreamViewers(stream);
+        broadcastStreams();
+      });
+    }
+
+    socket.on('stream:signal', (payload = {}) => {
+      const to = String(payload.to || '');
+      if (!to || !payload.data) return;
+      const target = streamIo.sockets.get(to);
+      if (!target || !target.rooms.has(streamRoom(streamId))) return;
+      target.emit('stream:signal', { from: socket.id, data: payload.data });
+    });
+  });
+
+  // Публичная страница просмотра: ссылку можно открыть в любом браузере
+  // без установки Carnage Party.
+  app.get('/stream/:id', (req, res, next) => {
+    if (!/^stream_[a-f0-9]{16}$/i.test(String(req.params.id || ''))) return next();
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(path.join(__dirname, 'public', 'stream.html'), (err) => {
+      if (err) next(err);
     });
   });
 

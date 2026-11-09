@@ -17,7 +17,7 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { useApp } from '../../store';
+import { useApp, selectChannel } from '../../store';
 import { cx, keyLabel } from '../../utils';
 import Avatar from '../ui/Avatar';
 import { voiceManager } from '../../voice';
@@ -151,11 +151,19 @@ export default function VoiceStage() {
   const settings = useApp((state) => state.settings);
   const setVoice = useApp((state) => state.setVoice);
   const openModal = useApp((state) => state.openModal);
+  const channels = useApp((state) => state.channels);
+  const dms = useApp((state) => state.dms);
+  const streams = useApp((state) => state.streams);
   const [fullscreen, setFullscreen] = useState(false);
   const [streamFullscreen, setStreamFullscreen] = useState(null);
   const previousScreens = useRef({ channelId: null, ids: new Set() });
 
   const channelParticipants = voiceStates[voice.channelId] || [];
+  const channel = voice.channelId ? selectChannel({ channels, dms }, voice.channelId) : null;
+  const channelName = channel && channel.type !== 'dm' ? channel.name : '';
+  const channelStreams = (streams || []).filter(
+    (stream) => stream.live !== false && stream.channelId === voice.channelId
+  );
 
   useEffect(() => {
     if (!voice.joined) {
@@ -382,6 +390,20 @@ export default function VoiceStage() {
           >
             {voice.screen ? <Monitor size={22} /> : <MonitorOff size={22} />}
             <span>Экран</span>
+          </button>
+          <button
+            className={cx('voice-control', 'stream', channelStreams.length > 0 && 'live')}
+            onClick={() =>
+              openModal('startStream', {
+                channelId: voice.channelId,
+                channelName,
+              })
+            }
+            title="Начать трансляцию в канале"
+          >
+            <Radio size={22} />
+            <span>Стрим</span>
+            {channelStreams.length ? <span className="voice-control-live" /> : null}
           </button>
           <button
             className="voice-control"
