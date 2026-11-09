@@ -14,7 +14,7 @@ export const CHAT_STYLE_OPTIONS = [
   { id: 'light', label: 'Светлый', hint: 'Чистый и контрастный' },
   { id: 'neon', label: 'Неон', hint: 'Яркая подсветка' },
   { id: 'gold', label: 'Золото', hint: 'Премиальное оформление' },
-  { id: 'minimal', label: 'Минимал', hint: 'Только текст' },
+  { id: 'minimal', label: 'Минимал', hint: 'Тёмная дымка' },
 ];
 
 export const CAMERA_STYLE_OPTIONS = [
@@ -654,9 +654,13 @@ class StreamBroadcaster {
     const widthClamped = clamp(width, 0.12, 0.6);
     const x = Number.isFinite(next?.x) ? next.x : current.x;
     const y = Number.isFinite(next?.y) ? next.y : current.y;
+    // Высота окна камеры зависит от пропорций итогового кадра, поэтому
+    // нижнюю границу считаем по ней, а не по ширине.
+    const heightPerWidth =
+      (this.screenAspect || 16 / 9) / (this.cameraAspect || 16 / 9);
     this.pipLayout = {
       x: clamp(x, 0.005, 0.995 - widthClamped),
-      y: clamp(y, 0.005, 0.995),
+      y: clamp(y, 0.005, Math.max(0.005, 0.995 - widthClamped * heightPerWidth)),
       w: widthClamped,
     };
     if (persist) {

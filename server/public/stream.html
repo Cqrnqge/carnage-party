@@ -402,6 +402,85 @@
       cursor: pointer;
     }
     .chat-form button svg { width: 15px; height: 15px; }
+    .chat-form .chat-emoji-btn {
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.82);
+    }
+    .chat.chat-style-light .chat-form .chat-emoji-btn {
+      border-color: rgba(20, 14, 28, 0.16);
+      background: rgba(20, 14, 28, 0.06);
+      color: #1c1722;
+    }
+    .chat.chat-style-gold .chat-form button.chat-emoji-btn {
+      border-color: rgba(246, 196, 83, 0.32);
+      background: rgba(246, 196, 83, 0.12);
+      color: #ffe3a1;
+    }
+
+    /* Компактный выбор смайлов для публичной страницы. */
+    .emoji-pop {
+      position: fixed;
+      z-index: 60;
+      display: flex;
+      flex-direction: column;
+      width: 272px;
+      height: 238px;
+      padding: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 12px;
+      background: rgba(12, 9, 17, 0.97);
+      color: #fff;
+      box-shadow: 0 22px 60px rgba(0, 0, 0, 0.62);
+      backdrop-filter: blur(14px);
+    }
+    .emoji-pop[hidden] { display: none; }
+    .emoji-pop-tabs {
+      flex: none;
+      display: flex;
+      gap: 2px;
+      padding: 1px 1px 5px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .emoji-pop-tabs::-webkit-scrollbar { display: none; }
+    .emoji-pop-tab {
+      flex: none;
+      width: 30px;
+      height: 28px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      font-size: 16px;
+      cursor: pointer;
+      opacity: 0.65;
+    }
+    .emoji-pop-tab:hover { background: rgba(255, 255, 255, 0.1); opacity: 1; }
+    .emoji-pop-tab.active { background: rgba(224, 71, 210, 0.24); opacity: 1; }
+    .emoji-pop-grid {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 1px;
+      align-content: start;
+      padding: 2px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+    .emoji-pop-cell {
+      display: grid;
+      place-items: center;
+      width: 100%;
+      aspect-ratio: 1;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      font-size: 19px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .emoji-pop-cell:hover { background: rgba(255, 255, 255, 0.12); }
 
     /* Стили чата, выбранные стримером в студии. */
     .chat.chat-style-light {
@@ -503,29 +582,28 @@
     }
 
     .chat.chat-style-minimal {
-      border-color: transparent;
-      background: transparent;
-      box-shadow: none;
-      backdrop-filter: none;
-      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+      border-color: rgba(255, 255, 255, 0.14);
+      background: rgba(9, 7, 13, 0.78);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42);
+      backdrop-filter: blur(9px);
+      text-shadow: none;
     }
     .chat.chat-style-minimal .chat-head {
-      border-bottom-color: rgba(255, 255, 255, 0.22);
-      background: transparent;
+      border-bottom-color: rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.05);
     }
     .chat.chat-style-minimal .chat-author { color: #ffffff; }
     .chat.chat-style-minimal .chat-msg.guest .chat-author { color: rgba(255, 255, 255, 0.78); }
     .chat.chat-style-minimal .chat-text { color: #ffffff; }
     .chat.chat-style-minimal .chat-empty { color: rgba(255, 255, 255, 0.6); }
     .chat.chat-style-minimal .chat-form {
-      border-top-color: transparent;
-      background: transparent;
-      padding-left: 0;
-      padding-right: 0;
+      border-top-color: rgba(255, 255, 255, 0.1);
+      background: rgba(0, 0, 0, 0.24);
+      padding: 6px;
     }
     .chat.chat-style-minimal .chat-form input {
-      border-color: rgba(255, 255, 255, 0.28);
-      background: rgba(0, 0, 0, 0.38);
+      border-color: rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.07);
     }
 
     .stage:fullscreen,
@@ -634,11 +712,19 @@
           <div class="chat-empty" id="chat-empty">Пока тихо. Напишите первым!</div>
         </div>
         <form class="chat-form" id="chat-form">
+          <button class="chat-emoji-btn" type="button" id="chat-emoji-btn" aria-label="Смайлы" title="Смайлы" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+          </button>
           <input id="chat-input" maxlength="500" placeholder="Написать в чат…" autocomplete="off" aria-label="Сообщение в чат трансляции" />
           <button type="submit" aria-label="Отправить сообщение">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
           </button>
         </form>
+      </div>
+
+      <div class="emoji-pop" id="emoji-pop" hidden>
+        <div class="emoji-pop-tabs" id="emoji-pop-tabs"></div>
+        <div class="emoji-pop-grid" id="emoji-pop-grid"></div>
       </div>
     </main>
   </div>
@@ -671,6 +757,10 @@
       var chatFormEl = document.getElementById('chat-form');
       var chatInputEl = document.getElementById('chat-input');
       var chatSelfEl = document.getElementById('chat-self');
+      var chatEmojiBtn = document.getElementById('chat-emoji-btn');
+      var emojiPopEl = document.getElementById('emoji-pop');
+      var emojiTabsEl = document.getElementById('emoji-pop-tabs');
+      var emojiGridEl = document.getElementById('emoji-pop-grid');
 
       var socket = null;
       var pc = null;
@@ -829,6 +919,8 @@
         stage.classList.remove('playing');
         chatInputEl.disabled = true;
         chatInputEl.placeholder = 'Трансляция завершена';
+        chatEmojiBtn.disabled = true;
+        closeEmojiPop();
       }
 
       function startSound() {
@@ -862,6 +954,118 @@
         socket.emit('stream:chat', { text: value });
         chatInputEl.value = '';
       });
+
+      // Компактный выбор смайлов для зрителей публичной страницы.
+      var EMOJI_GROUPS = [
+        {
+          id: 'smileys',
+          icon: '😀',
+          emojis: '😀 😃 😄 😁 😆 😅 😂 🤣 🥲 😊 😇 🙂 🙃 😉 😌 😍 🥰 😘 😋 😛 😝 😜 🤪 🤨 🧐 🤓 😎 🥳 😏 😒 😔 😟 😕 🙁 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 🥵 🥶 😱 😨 😰 😥 😓 🤗 🤔 🫣 🤭 🤫 🫢 🫡 🤥 😶 😐 😑 😬 🙄 😯 😮 😲 🥱 😴 🤤 😪 😵 🤐 🥴 🤢 🤮 🤧 😷 🤒 🤕 🤑 🤠 😈 😺'.split(' '),
+        },
+        {
+          id: 'people',
+          icon: '👋',
+          emojis: '👋 🤚 🖐️ ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🫰 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 🫶 👐 🤲 🤝 🙏 💪 🦾 🫵 🖕 ✍️ 💅 🤳 👀 🧠 👶 🧒 👦 👧 🧑 👨 👩 🧓 👴 👵 🧑‍💻 👨‍💻 👩‍💻 🕺 💃 👯 🫂 🎅 🤶 🦸 🦹 🧙'.split(' '),
+        },
+        {
+          id: 'nature',
+          icon: '🐻',
+          emojis: '🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🙈 🙉 🙊 🐒 🐔 🐧 🐦 🐤 🦆 🦅 🦉 🦇 🐺 🐗 🐴 🦄 🐝 🪲 🦋 🐌 🐞 🐜 🕷️ 🐢 🐍 🦎 🐙 🦑 🦐 🦞 🦀 🐡 🐠 🐟 🐬 🐳 🐋 🦈 🐊 🐅 🐆 🦓 🦍 🐘 🦒 🦘 🐄 🐖 🐑 🦌 🐕 🐈 🌵 🎄 🌲 🌳 🌴 🌱 🌿 ☘️ 🍀 🌷 🌹 🌺 🌸 🌼 🌻 🌞 🌙 ⭐ 🌟 ✨ ⚡ 🔥 🌈 ☀️ ❄️ ⛄ 🌊'.split(' '),
+        },
+        {
+          id: 'food',
+          icon: '🍔',
+          emojis: '🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🍆 🥑 🥦 🥬 🥒 🌶️ 🌽 🥕 🥔 🍠 🥐 🥯 🍞 🥖 🥨 🧀 🥚 🍳 🥞 🥓 🥩 🍗 🍖 🌭 🍔 🍟 🍕 🥪 🥙 🌮 🌯 🥗 🥘 🍝 🍜 🍲 🍛 🍣 🍱 🥟 🍤 🍙 🍚 🍘 🍥 🥮 🍢 🍡 🍧 🍨 🍦 🥧 🧁 🍰 🎂 🍮 🍭 🍬 🍫 🍿 🍩 🍪 🌰 🥜 ☕ 🍵 🧃 🥤 🧋 🍶 🍺 🍻 🥂 🍷 🥃 🍸 🍹 🧉 🍾 🧊'.split(' '),
+        },
+        {
+          id: 'activities',
+          icon: '🎮',
+          emojis: '⚽ 🏀 🏈 ⚾ 🥎 🎾 🏐 🏉 🥏 🎱 🪀 🏓 🏸 🏒 🏑 🥍 🏏 🥅 ⛳ 🪁 🏹 🎣 🤿 🥊 🥋 🎽 🛹 🛼 🛷 ⛸️ 🥌 🎿 🏂 🪂 🏋️ 🤼 🤸 ⛹️ 🤺 🤾 🏌️ 🏇 🧘 🏄 🏊 🤽 🚣 🧗 🚵 🚴 🏆 🥇 🥈 🥉 🏅 🎖️ 🏵️ 🎗️ 🎫 🎟️ 🎪 🤹 🎭 🩰 🎨 🎬 🎤 🎧 🎼 🎹 🥁 🪘 🎷 🎺 🎸 🪕 🎻 🎲 🎯 🎳 🎮 🕹️ 🎰 🧩 🪩 🎉 🎊 🎈 🎁 🎀 🪄 🎃'.split(' '),
+        },
+        {
+          id: 'symbols',
+          icon: '❤️',
+          emojis: '❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 ☮️ ✝️ ☪️ 🕉️ ☸️ ✡️ 🔱 ⚛️ ☯️ ✴️ 🆚 💮 💯 💢 ♨️ 🚷 🚯 ⛔ 📛 🚫 ⚠️ 🚸 ♻️ ✅ ❇️ ✳️ ❎ 🌐 💠 🌀 💤 👑 💀 ☠️ 🤖 👻 🎃 🎅 💩 🚀 💻 📱 💡 📷 📺 📻 🎙️ 🔋 🔌 💰 💳 💎 🔧 🔨 🛡️ ⚔️ 🔮 📿 🧿'.split(' '),
+        },
+      ];
+
+      var emojiGroup = EMOJI_GROUPS[0];
+
+      function renderEmojiGroup(group) {
+        emojiGroup = group;
+        emojiTabsEl.innerHTML = '';
+        EMOJI_GROUPS.forEach(function (item) {
+          var tab = document.createElement('button');
+          tab.type = 'button';
+          tab.className = 'emoji-pop-tab' + (item.id === group.id ? ' active' : '');
+          tab.textContent = item.icon;
+          tab.title = item.id;
+          tab.addEventListener('click', function () { renderEmojiGroup(item); });
+          emojiTabsEl.appendChild(tab);
+        });
+        emojiGridEl.innerHTML = '';
+        group.emojis.forEach(function (emoji) {
+          var cell = document.createElement('button');
+          cell.type = 'button';
+          cell.className = 'emoji-pop-cell';
+          cell.textContent = emoji;
+          cell.addEventListener('click', function () { insertChatEmoji(emoji); });
+          emojiGridEl.appendChild(cell);
+        });
+        emojiGridEl.scrollTop = 0;
+      }
+
+      function insertChatEmoji(emoji) {
+        var start = chatInputEl.selectionStart == null ? chatInputEl.value.length : chatInputEl.selectionStart;
+        var end = chatInputEl.selectionEnd == null ? chatInputEl.value.length : chatInputEl.selectionEnd;
+        var next = (chatInputEl.value.slice(0, start) + emoji + chatInputEl.value.slice(end)).slice(0, 500);
+        chatInputEl.value = next;
+        chatInputEl.focus();
+        var position = Math.min(start + emoji.length, next.length);
+        try { chatInputEl.setSelectionRange(position, position); } catch (err) {}
+      }
+
+      function closeEmojiPop() {
+        emojiPopEl.hidden = true;
+        chatEmojiBtn.setAttribute('aria-expanded', 'false');
+      }
+
+      function toggleEmojiPop() {
+        if (emojiPopEl.hidden) {
+          var rect = chatEmojiBtn.getBoundingClientRect();
+          var width = Math.min(272, window.innerWidth - 16);
+          var height = Math.min(238, Math.max(150, window.innerHeight - 16));
+          emojiPopEl.style.width = width + 'px';
+          emojiPopEl.style.height = height + 'px';
+          emojiPopEl.style.left =
+            Math.max(8, Math.min(window.innerWidth - width - 8, rect.left)) + 'px';
+          var top = rect.top - height - 8;
+          if (top < 8) top = Math.min(window.innerHeight - height - 8, rect.bottom + 8);
+          emojiPopEl.style.top = Math.max(8, top) + 'px';
+          emojiPopEl.hidden = false;
+          chatEmojiBtn.setAttribute('aria-expanded', 'true');
+          renderEmojiGroup(emojiGroup);
+        } else {
+          closeEmojiPop();
+        }
+      }
+
+      chatEmojiBtn.addEventListener('click', function (event) {
+        event.stopPropagation();
+        toggleEmojiPop();
+      });
+
+      document.addEventListener('mousedown', function (event) {
+        if (emojiPopEl.hidden) return;
+        if (emojiPopEl.contains(event.target) || chatEmojiBtn.contains(event.target)) return;
+        closeEmojiPop();
+      });
+
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && !emojiPopEl.hidden) closeEmojiPop();
+      });
+
+      window.addEventListener('resize', closeEmojiPop);
 
       function fullscreenElement() {
         return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement || null;

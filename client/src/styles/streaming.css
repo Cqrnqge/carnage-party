@@ -1395,20 +1395,35 @@
   cursor: default;
 }
 
-.stream-chat-resize {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: 9px 0 12px 0;
-  background: linear-gradient(135deg, transparent 28%, rgba(224, 71, 210, 0.55));
-  color: #fff;
-  cursor: nwse-resize;
-  touch-action: none;
+.stream-chat-form button.stream-chat-emoji-btn {
+  width: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.stream-chat-form button.stream-chat-emoji-btn:hover {
+  border-color: rgba(224, 71, 210, 0.6);
+  background: rgba(224, 71, 210, 0.24);
+}
+
+.stream-chat.chat-style-light .stream-chat-form button.stream-chat-emoji-btn {
+  border-color: rgba(20, 14, 28, 0.16);
+  background: rgba(20, 14, 28, 0.06);
+  color: #1c1722;
+}
+
+/* Поповер смайлов рисуется поверх приложения через портал. */
+.stream-emoji-pop {
+  position: fixed;
+  z-index: 10000;
+}
+
+.stream-emoji-pop .emoji-picker {
+  width: 100%;
+  max-width: 100%;
+  height: min(394px, calc(100vh - 96px));
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.68);
 }
 
 /* Кнопки смены стиля на чате и камере. */
@@ -1484,6 +1499,107 @@
 .stream-stage-pip.camera-style-none {
   outline: none;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* В предпросмотре камера уже вписана в итоговый поток. Окно поверх неё
+   служит прозрачным редактором, поэтому не дублирует видео и не рисует
+   второй фон — только рамку и элементы управления. */
+.stream-stage-pip.baked {
+  overflow: visible;
+  background: transparent;
+  box-shadow: none;
+  outline: 1px dashed rgba(255, 255, 255, 0.5);
+}
+
+.stream-stage-pip.baked:hover,
+.stream-stage-pip.baked:active {
+  outline-color: rgba(224, 71, 210, 0.85);
+}
+
+.stream-stage-pip.baked .stream-pip-move,
+.stream-stage-pip.baked .stream-pip-style {
+  z-index: 5;
+}
+
+/* Ручки изменения размера: по всем четырём сторонам и четырём углам. */
+.stream-resize-handle {
+  position: absolute;
+  z-index: 4;
+  touch-action: none;
+}
+
+.stream-resize-handle:hover {
+  background: rgba(224, 71, 210, 0.4);
+}
+
+.stream-resize-handle.dir-n {
+  top: 0;
+  left: 14px;
+  right: 14px;
+  height: 7px;
+  cursor: ns-resize;
+}
+
+.stream-resize-handle.dir-s {
+  bottom: 0;
+  left: 14px;
+  right: 14px;
+  height: 7px;
+  cursor: ns-resize;
+}
+
+.stream-resize-handle.dir-e {
+  top: 14px;
+  right: 0;
+  bottom: 14px;
+  width: 7px;
+  cursor: ew-resize;
+}
+
+.stream-resize-handle.dir-w {
+  top: 14px;
+  left: 0;
+  bottom: 14px;
+  width: 7px;
+  cursor: ew-resize;
+}
+
+.stream-resize-handle.dir-nw,
+.stream-resize-handle.dir-ne,
+.stream-resize-handle.dir-sw,
+.stream-resize-handle.dir-se {
+  width: 14px;
+  height: 14px;
+}
+
+.stream-resize-handle.dir-nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.stream-resize-handle.dir-ne {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+
+.stream-resize-handle.dir-sw {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.stream-resize-handle.dir-se {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+}
+
+/* Уголок чата остаётся заметным, как и раньше. */
+.stream-chat.editable .stream-resize-handle.dir-se {
+  border-radius: 0 0 12px 0;
+  background: linear-gradient(135deg, transparent 38%, rgba(224, 71, 210, 0.6) 38%);
 }
 
 /* Варианты оформления чата. Стиль меняет фон, рамку, шапку и форму. */
@@ -1646,17 +1762,23 @@
   color: #221a09;
 }
 
+.stream-chat.chat-style-gold .stream-chat-form button.stream-chat-emoji-btn {
+  border-color: rgba(246, 196, 83, 0.32);
+  background: rgba(246, 196, 83, 0.14);
+  color: #ffe3a1;
+}
+
 .stream-chat.chat-style-minimal {
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(9, 7, 13, 0.78);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(9px);
+  text-shadow: none;
 }
 
 .stream-chat.chat-style-minimal .stream-chat-head {
-  border-bottom-color: rgba(255, 255, 255, 0.22);
-  background: transparent;
+  border-bottom-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .stream-chat.chat-style-minimal .stream-chat-author {
@@ -1676,15 +1798,14 @@
 }
 
 .stream-chat.chat-style-minimal .stream-chat-form {
-  border-top-color: transparent;
-  background: transparent;
-  padding-left: 0;
-  padding-right: 0;
+  border-top-color: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.24);
+  padding: 6px;
 }
 
 .stream-chat.chat-style-minimal .stream-chat-form input {
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(0, 0, 0, 0.38);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .stream-chat.chat-style-minimal .stream-chat-style-btn {
@@ -1824,7 +1945,7 @@
 
 .stream-style-swatch.chat-style-minimal {
   border-style: dashed;
-  background: transparent;
+  background: rgba(9, 7, 13, 0.78);
 }
 
 .stream-style-swatch.camera-style-classic {

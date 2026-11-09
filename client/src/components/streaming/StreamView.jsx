@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertCircle,
   ArrowLeft,
@@ -19,6 +20,7 @@ import {
   Radio,
   RotateCw,
   Send,
+  Smile,
   Square,
   Volume2,
   VolumeX,
@@ -34,12 +36,32 @@ import {
 } from '../../streaming';
 import { cx } from '../../utils';
 import {
+  moveChatLayout,
+  movePipLayout,
+  resizeChatLayout,
+  resizePipLayout,
+} from '../../stream-layout';
+import {
   copyText,
   formatElapsed,
   sourceLabel,
   viewersLabel,
 } from '../../stream-utils';
 import Avatar from '../ui/Avatar';
+import EmojiPicker from '../chat/EmojiPicker';
+
+const RESIZE_DIRECTIONS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
+
+function ResizeHandles({ onStart, className = '' }) {
+  return RESIZE_DIRECTIONS.map((direction) => (
+    <span
+      key={direction}
+      className={cx('stream-resize-handle', `dir-${direction}`, className)}
+      onPointerDown={(event) => onStart(event, direction)}
+      aria-hidden="true"
+    />
+  ));
+}
 
 const STATUS_MESSAGES = {
   connecting: {
@@ -81,10 +103,6 @@ function useElapsed(value) {
     return () => clearInterval(timer);
   }, []);
   return formatElapsed(value);
-}
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
 }
 
 function openPublicLink(url) {
@@ -138,11 +156,11 @@ export default function StreamView({ streamId }) {
     : (streams || []).find((item) => item.id === streamId) || null;
 
   const videoRef = useRef(null);
-  const cameraVideoRef = useRef(null);
   const stageRef = useRef(null);
   const frameRef = useRef(null);
   const pipDragRef = useRef(null);
   const chatListRef = useRef(null);
+  const chatInputRef = useRef(null);
   const chatDragRef = useRef(null);
   const watcherRef = useRef(null);
   const [chatMessages, setChatMessages] = useState([]);
@@ -159,6 +177,8 @@ export default function StreamView({ streamId }) {
   const [blocked, setBlocked] = useState(false);
   const [copied, setCopied] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [emojiBox, setEmojiBox] = useState(null);
   const [pipLayout, setPipLayout] = useState(() => streamBroadcaster.getPipLayout());
   const [cameraAspect, setCameraAspect] = useState(streamBroadcaster.cameraAspect || 16 / 9);
   const [frameBox, setFrameBox] = useState({ left: 0, top: 0, width: 100, height: 100 });
@@ -178,6 +198,8 @@ export default function StreamView({ streamId }) {
     setChatSelf(null);
     setChatLayout(streamBroadcaster.getChatLayout());
     setStyleMenu(null);
+    setEmojiOpen(false);
+    setEmojiBox(null);
   }, [streamId]);
 
   useEffect(() => {
@@ -209,16 +231,14 @@ export default function StreamView({ streamId }) {
     });
   }, [mine, streamId]);
 
-  // Локальный предпросмотр собственного эфира. Для режима «экран + камера»
-  // основной холст показывает экран, а камера рендерится отдельным окном,
-  // которое можно двигать и растягивать.
+  // Локальный предпросмотр собственного эфира. Показываем именно итоговый
+  // поток: в режиме «экран + камера» он уже содержит камеру, а при захвате
+  // окна — обрезанную область без лишней части монитора.
   useEffect(() => {
     if (!mine) return undefined;
     const video = videoRef.current;
     if (!video) return undefined;
-    const local =
-      (stream?.source === 'both' && streamBroadcaster.screenStream) ||
-      streamBroadcaster.localStream;
+    const local = streamBroadcaster.localStream;
     video.srcObject = local || null;
     video.muted = true;
     video.classList.toggle('mirror', stream?.source === 'camera');
@@ -230,22 +250,6 @@ export default function StreamView({ streamId }) {
       } catch {}
     };
   }, [mine, streamId, stream?.source]);
-
-  useEffect(() => {
-    if (!pipEditor) return undefined;
-    const video = cameraVideoRef.current;
-    if (!video) return undefined;
-    const camera = streamBroadcaster.cameraStream;
-    video.srcObject = camera || null;
-    video.muted = true;
-    if (camera) video.play().catch(() => {});
-    return () => {
-      try {
-        video.pause();
-        video.srcObject = null;
-      } catch {}
-    };
-  }, [pipEditor]);
 
   // Положение области видео внутри сцены (object-fit: contain) и актуальные
   // пропорции потоков — чтобы окно камеры совпадало с тем, что видят зрители.
@@ -296,36 +300,27 @@ export default function StreamView({ streamId }) {
     };
   }, [pipEditor]);
 
-  const beginPipDrag = (event, mode) => {
+  const beginPipDrag = (event, mode, direction = 'se') => {
     if (!pipEditor) return;
     event.preventDefault();
     event.stopPropagation();
     const frame = frameRef.current?.getBoundingClientRect();
     if (!frame?.width || !frame?.height) return;
     const start = { ...pipLayout };
-    pipDragRef.current = { mode, start };
+    pipDragRef.current = { mode, start, direction };
 
     const move = (moveEvent) => {
       const drag = pipDragRef.current;
       if (!drag) return;
       const dx = (moveEvent.clientX - event.clientX) / frame.width;
       const dy = (moveEvent.clientY - event.clientY) / frame.height;
-      const aspect = cameraAspect || 16 / 9;
-      let next = { ...drag.start };
-      if (drag.mode === 'resize') {
-        const maxWidthByRight = 0.995 - drag.start.x;
-        const maxWidthByBottom =
-          ((0.995 - drag.start.y) * frame.height * aspect) / frame.width;
-        next.w = clamp(
-          drag.start.w + dx,
-          0.12,
-          Math.max(0.12, Math.min(0.6, maxWidthByRight, maxWidthByBottom))
-        );
-      } else {
-        const heightNorm = (drag.start.w * frame.width / aspect) / frame.height;
-        next.x = clamp(drag.start.x + dx, 0.005, 0.995 - drag.start.w);
-        next.y = clamp(drag.start.y + dy, 0.005, 0.995 - heightNorm);
-      }
+      // Сколько долей высоты сцены приходится на одну долю ширины камеры.
+      const heightPerWidth =
+        frame.width / Math.max(1, frame.height * (cameraAspect || 16 / 9));
+      const next =
+        drag.mode === 'resize'
+          ? resizePipLayout(drag.start, dx, dy, drag.direction, heightPerWidth)
+          : movePipLayout(drag.start, dx, dy, heightPerWidth);
       streamBroadcaster.setPipLayout(next);
       setPipLayout(next);
     };
@@ -408,7 +403,7 @@ export default function StreamView({ streamId }) {
     if (list) list.scrollTop = list.scrollHeight;
   }, [chatMessages]);
 
-  const beginChatDrag = (event, mode) => {
+  const beginChatDrag = (event, mode, direction = 'se') => {
     if (!chatEditor) return;
     event.preventDefault();
     event.stopPropagation();
@@ -417,20 +412,17 @@ export default function StreamView({ streamId }) {
     const rect = stage.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
     const start = { ...chatLayout };
-    chatDragRef.current = { mode };
+    chatDragRef.current = { mode, direction, start };
 
     const move = (moveEvent) => {
-      if (!chatDragRef.current) return;
+      const drag = chatDragRef.current;
+      if (!drag) return;
       const dx = (moveEvent.clientX - event.clientX) / rect.width;
       const dy = (moveEvent.clientY - event.clientY) / rect.height;
-      const next = { ...start };
-      if (mode === 'resize') {
-        next.w = clamp(start.w + dx, 0.16, 0.85);
-        next.h = clamp(start.h + dy, 0.18, 0.88);
-      } else {
-        next.x = clamp(start.x + dx, 0.005, 0.995 - start.w);
-        next.y = clamp(start.y + dy, 0.005, 0.995 - start.h);
-      }
+      const next =
+        drag.mode === 'resize'
+          ? resizeChatLayout(drag.start, dx, dy, drag.direction)
+          : moveChatLayout(drag.start, dx, dy);
       streamBroadcaster.setChatLayout(next);
       setChatLayout(streamBroadcaster.getChatLayout());
     };
@@ -455,6 +447,42 @@ export default function StreamView({ streamId }) {
     if (mine) streamBroadcaster.sendChat(value);
     else watcherRef.current?.sendChat(value);
     setChatText('');
+  };
+
+  const toggleEmojiPicker = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (emojiOpen) {
+      setEmojiOpen(false);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    const width = Math.min(330, Math.max(240, window.innerWidth - 24));
+    const height = Math.min(394, Math.max(140, window.innerHeight - 96));
+    let top = rect.top - height - 8;
+    if (top < 8) {
+      top = Math.min(window.innerHeight - height - 8, rect.bottom + 8);
+    }
+    setEmojiBox({
+      left: Math.min(Math.max(8, rect.left), window.innerWidth - width - 8),
+      top: Math.max(8, top),
+      width,
+    });
+    setEmojiOpen(true);
+  };
+
+  const insertChatEmoji = (emoji) => {
+    const el = chatInputRef.current;
+    const start = el?.selectionStart ?? chatText.length;
+    const end = el?.selectionEnd ?? chatText.length;
+    const next = (chatText.slice(0, start) + emoji + chatText.slice(end)).slice(0, 500);
+    setChatText(next);
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const position = Math.min(start + emoji.length, next.length);
+      el.setSelectionRange(position, position);
+    });
   };
 
   const chooseChatStyle = (style) => {
@@ -630,7 +658,7 @@ export default function StreamView({ streamId }) {
               }}
             >
               <div
-                className={cx('stream-stage-pip', `camera-style-${cameraStyle}`)}
+                className={cx('stream-stage-pip', 'baked', `camera-style-${cameraStyle}`)}
                 style={{
                   left: `${pipLayout.x * 100}%`,
                   top: `${pipLayout.y * 100}%`,
@@ -639,7 +667,6 @@ export default function StreamView({ streamId }) {
                 }}
                 onPointerDown={(event) => beginPipDrag(event, 'move')}
               >
-                <video ref={cameraVideoRef} autoPlay playsInline muted />
                 <span className="stream-pip-move">
                   <Move size={14} />
                 </span>
@@ -657,15 +684,9 @@ export default function StreamView({ streamId }) {
                   <Palette size={12} />
                   <span>Сменить стиль</span>
                 </button>
-                <button
-                  type="button"
-                  className="stream-pip-resize"
-                  aria-label="Изменить размер камеры"
-                  title="Потяните, чтобы изменить размер"
-                  onPointerDown={(event) => beginPipDrag(event, 'resize')}
-                >
-                  <Maximize2 size={13} />
-                </button>
+                <ResizeHandles
+                  onStart={(event, direction) => beginPipDrag(event, 'resize', direction)}
+                />
               </div>
             </div>
           ) : null}
@@ -731,7 +752,19 @@ export default function StreamView({ streamId }) {
               onSubmit={sendChatMessage}
               onPointerDown={(event) => event.stopPropagation()}
             >
+              <button
+                type="button"
+                className="stream-chat-emoji-btn"
+                aria-label="Смайлы"
+                title="Смайлы"
+                aria-expanded={emojiOpen}
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={toggleEmojiPicker}
+              >
+                <Smile size={15} />
+              </button>
               <input
+                ref={chatInputRef}
                 value={chatText}
                 onChange={(event) => setChatText(event.target.value)}
                 maxLength={500}
@@ -743,15 +776,9 @@ export default function StreamView({ streamId }) {
               </button>
             </form>
             {chatEditor ? (
-              <button
-                type="button"
-                className="stream-chat-resize"
-                aria-label="Изменить размер чата"
-                title="Потяните, чтобы изменить размер чата"
-                onPointerDown={(event) => beginChatDrag(event, 'resize')}
-              >
-                <Maximize2 size={12} />
-              </button>
+              <ResizeHandles
+                onStart={(event, direction) => beginChatDrag(event, 'resize', direction)}
+              />
             ) : null}
           </div>
 
@@ -816,8 +843,8 @@ export default function StreamView({ streamId }) {
             <span className="stream-pip-hint">
               <Move size={13} />
               {pipEditor
-                ? 'Перетащите камеру и чат · потяните за угол'
-                : 'Перетащите чат · потяните за угол'}
+                ? 'Перетащите камеру и чат · тяните за любую сторону'
+                : 'Перетащите чат · тяните за любую сторону'}
             </span>
           ) : null}
 
@@ -903,6 +930,28 @@ export default function StreamView({ streamId }) {
           </div>
         </div>
       </div>
+
+      {emojiOpen && emojiBox && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="stream-emoji-pop"
+              style={{
+                left: `${emojiBox.left}px`,
+                top: `${emojiBox.top}px`,
+                width: `${emojiBox.width}px`,
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <EmojiPicker
+                className="stream-emoji-picker"
+                onPick={insertChatEmoji}
+                onClose={() => setEmojiOpen(false)}
+              />
+            </div>,
+            stageRef.current || document.body
+          )
+        : null}
 
       <div className="stream-details">
         <div className="stream-details-card">
