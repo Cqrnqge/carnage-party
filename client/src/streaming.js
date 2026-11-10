@@ -2,7 +2,6 @@ import { io } from 'socket.io-client';
 import { api, getServerBase, getToken } from './api';
 import { useApp } from './store';
 import { getSocket } from './socket';
-import { rtmpManager } from './rtmp';
 import { iceConfig, refreshIceConfig } from './ice';
 
 export const CHAT_STYLE_OPTIONS = [
@@ -1056,7 +1055,6 @@ class StreamBroadcaster {
   handleRemoteEnd({ quiet = false } = {}) {
     const wasActive = Boolean(this.stream || this.localStream);
     this.stream = null;
-    rtmpManager.stop({ silent: true }).catch(() => {});
     this.stopPreview();
     for (const viewerId of [...this.peers.keys()]) this.closePeer(viewerId);
     if (this.socket) {
@@ -1073,7 +1071,6 @@ class StreamBroadcaster {
     if (this.stopping) return;
     this.stopping = true;
     const streamId = this.stream?.id;
-    await rtmpManager.stop({ silent: true }).catch(() => {});
     this.stopPreview();
     for (const viewerId of [...this.peers.keys()]) this.closePeer(viewerId);
     if (this.socket) {

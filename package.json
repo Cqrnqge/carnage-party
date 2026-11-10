@@ -1,7 +1,7 @@
 {
   "name": "carnage-party",
   "productName": "Carnage Party",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "private": true,
   "description": "Carnage Party — полноценный мессенджер в стиле Discord на Electron + React",
   "main": "electron/main.cjs",

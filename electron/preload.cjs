@@ -33,18 +33,4 @@ contextBridge.exposeInMainWorld('desktop', {
     ipcRenderer.on('carnage:ptt', listener);
     return () => ipcRenderer.removeListener('carnage:ptt', listener);
   },
-  rtmp: {
-    supported: true,
-    getTargets: () => ipcRenderer.invoke('carnage:rtmp-targets'),
-    saveTargets: (targets) => ipcRenderer.invoke('carnage:rtmp-save-targets', targets),
-    start: (payload) => ipcRenderer.invoke('carnage:rtmp-start', payload),
-    stop: () => ipcRenderer.invoke('carnage:rtmp-stop'),
-    status: () => ipcRenderer.invoke('carnage:rtmp-status'),
-    chunk: (data) => ipcRenderer.send('carnage:rtmp-chunk', data),
-    onStatus: (callback) => {
-      const listener = (_event, payload) => callback(payload);
-      ipcRenderer.on('carnage:rtmp-status', listener);
-      return () => ipcRenderer.removeListener('carnage:rtmp-status', listener);
-    },
-  },
 });
