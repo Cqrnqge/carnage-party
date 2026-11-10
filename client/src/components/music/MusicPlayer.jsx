@@ -19,18 +19,7 @@ import { api, assetUrl } from '../../api';
 import { useApp, selectChannel } from '../../store';
 import { loadYouTubeApi } from '../../watch';
 import { cx } from '../../utils';
-
-function targetPosition(session, receivedAt, now = Date.now()) {
-  if (!session) return 0;
-  const base = Math.max(0, Number(session.position) || 0);
-  if (session.source?.live) return 0;
-  if (!session.playing) return base;
-  const updatedAt = Number(session.updatedAt) || now;
-  const serverNow = Number(session.serverNow) || updatedAt;
-  const serverPart = Math.max(0, serverNow - updatedAt) / 1000;
-  const localPart = Math.max(0, now - receivedAt) / 1000;
-  return base + serverPart + localPart;
-}
+import { noteSessionTiming, targetPosition } from './playback-time.mjs';
 
 function formatTime(value) {
   const total = Math.max(0, Math.floor(Number(value) || 0));
@@ -97,7 +86,7 @@ export default function MusicPlayer() {
   const playerRef = useRef(null);
   const dragRef = useRef(null);
   const modeRef = useRef('');
-  const timingRef = useRef({ key: '', receivedAt: Date.now() });
+  const timingRef = useRef({ session: null, receivedAt: Date.now() });
   const [blocked, setBlocked] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -114,19 +103,10 @@ export default function MusicPlayer() {
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
 
-  const sessionKey = session
-    ? `${session.botId}|${session.source?.url || ''}|${session.playing}|${session.position}|${session.updatedAt}`
-    : '';
-
-  useEffect(() => {
-    if (!session) {
-      timingRef.current = { key: '', receivedAt: Date.now() };
-      return;
-    }
-    if (timingRef.current.key !== sessionKey) {
-      timingRef.current = { key: sessionKey, receivedAt: Date.now() };
-    }
-  }, [sessionKey, session]);
+  // Каждое новое состояние с сервера содержит свежий serverNow. Запоминаем
+  // момент получения именно этого снимка: складывать его с временем,
+  // прошедшим с предыдущего снимка, нельзя — иначе позиция прыгает вперёд.
+  timingRef.current = noteSessionTiming(timingRef.current, session);
 
   const cleanupPlayback = () => {
     try {
@@ -156,7 +136,7 @@ export default function MusicPlayer() {
     const audio = audioRef.current;
     if (modeRef.current === 'youtube' && player?.seekTo && player.getCurrentTime) {
       const current = Number(player.getCurrentTime()) || 0;
-      if (force || Math.abs(current - target) > 2.5) {
+      if (force || Math.abs(current - target) > 3) {
         try {
           player.seekTo(target, true);
         } catch {}
@@ -165,7 +145,11 @@ export default function MusicPlayer() {
     }
     if (audio && audio.readyState >= 1) {
       const current = Number(audio.currentTime) || 0;
-      if (force || Math.abs(current - target) > 2.5) {
+      // Частые принудительные перемотки во время буферизации дают слышимый
+      // разрыв. Догоняем только при заметном отставании, а в обычном
+      // воспроизведении оставляем звук непрерывным.
+      if (audio.seeking && !force) return;
+      if (force || Math.abs(current - target) > 6) {
         try {
           audio.currentTime = target;
         } catch {}
@@ -300,6 +284,7 @@ export default function MusicPlayer() {
     } else {
       const audio = audioRef.current;
       if (audio) {
+        let startWhenReady = null;
         modeRef.current = 'audio';
         audio.pause();
         audio.removeAttribute('src');
@@ -321,6 +306,7 @@ export default function MusicPlayer() {
               if (data?.fatal) setError('Не удалось открыть HLS-поток');
             });
           } else {
+            audioSrcRef.current = hlsSource;
             audio.src = hlsSource;
             audio.load();
           }
@@ -329,8 +315,21 @@ export default function MusicPlayer() {
           audio.src = audioSrcRef.current;
           audio.load();
         }
-        if (session.playing) attemptPlay();
-        else audio.pause();
+        // Стартуем только после появления метаданных: иначе новый участник
+        // услышит начало трека и только потом получит перемотку на позицию.
+        if ((source.type === 'hls' || source.type === 'rutube') && Hls.isSupported()) {
+          // HLS запускается из MANIFEST_PARSED.
+        } else if (session.playing) {
+          startWhenReady = () => {
+            if (cancelled) return;
+            applyTarget(true);
+            attemptPlay();
+          };
+          if (audio.readyState >= 1) startWhenReady();
+          else audio.addEventListener('loadedmetadata', startWhenReady, { once: true });
+        } else {
+          audio.pause();
+        }
       }
     }
 
@@ -379,7 +378,7 @@ export default function MusicPlayer() {
     const id = setInterval(sync, 4000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, sessionKey, joined]);
+  }, [session, joined]);
 
   // Тик для прогресс-бара.
   useEffect(() => {
@@ -410,6 +409,22 @@ export default function MusicPlayer() {
 
   const visible = Boolean(joined && session);
   const position = session ? targetPosition(session, timingRef.current.receivedAt) : 0;
+  // Показываем реальное время медиаэлемента, когда он уже играет: так строка
+  // времени не прыгает из-за сетевой буферизации и коррекции позиции.
+  const playbackPosition = (() => {
+    if (!session) return null;
+    if (modeRef.current === 'youtube') {
+      try {
+        const value = Number(ytPlayerRef.current?.getCurrentTime?.());
+        if (Number.isFinite(value) && value > 0) return value;
+      } catch {}
+      return null;
+    }
+    const audio = audioRef.current;
+    if (!audio || audio.readyState < 1) return null;
+    if (audio.paused && !audio.ended && audio.currentTime <= 0.01) return null;
+    return Number.isFinite(audio.currentTime) ? audio.currentTime : null;
+  })();
   const isLive = Boolean(session?.source?.live);
   const totalDuration = duration || Math.max(0, Number(session?.source?.duration) || 0);
   const pendingPosition = pendingSeek
@@ -417,7 +432,13 @@ export default function MusicPlayer() {
       (session?.playing ? Math.max(0, Date.now() - pendingSeek.at) / 1000 : 0)
     : null;
   const displayPosition =
-    scrub !== null ? scrub : pendingPosition !== null ? pendingPosition : position;
+    scrub !== null
+      ? scrub
+      : pendingPosition !== null
+        ? pendingPosition
+        : playbackPosition !== null
+          ? playbackPosition
+          : position;
   const progress =
     !isLive && totalDuration > 0
       ? Math.min(100, (Math.max(0, displayPosition) / totalDuration) * 100)

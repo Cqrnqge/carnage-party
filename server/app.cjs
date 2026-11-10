@@ -35,9 +35,10 @@ const { createPushService } = require('./push.cjs');
 const { parseMusicSource, musicDTO, vkVideoIdFromUrl } = require('./music.cjs');
 const {
   resolveYouTube,
-  searchYouTube,
+  searchYouTubeCandidates,
   resolveRutube,
   resolveVk,
+  resolveVkAudio,
   isAllowedUpstream,
   fetchUpstream,
   pipeResponse,
@@ -2581,26 +2582,61 @@ function startServer(options = {}) {
           return fail(res, `Не удалось открыть VK Видео: ${error.message}`);
         }
       } else if (source.type === 'vk-audio') {
-        // VK Music без авторизации не отдаёт поиск и mp3. Берём название
-        // трека из ссылки, находим его на YouTube и играем через прокси.
+        // VK Music без авторизации не отдаёт поиск и mp3. Для прямой ссылки
+        // берём название трека из метаданных страницы VK и находим его на
+        // YouTube, а звук отдаём через уже готовый серверный прокси.
         try {
-          const found = await searchYouTube(source.query);
+          let query = source.query;
+          let vkMeta = null;
+          if (source.audioId) {
+            try {
+              vkMeta = await resolveVkAudio(source.audioId);
+              if (vkMeta.query) query = vkMeta.query;
+            } catch (error) {
+              if (!query) {
+                return fail(res, `Не удалось получить трек VK Music: ${error.message}`, 502);
+              }
+              console.warn('[music] VK Music metadata:', error.message);
+            }
+          }
+          if (!query) return fail(res, 'Не удалось определить трек по ссылке VK Music', 400);
+
+          const candidates = await searchYouTubeCandidates(query, { limit: 5 });
           source.origin = 'vk-audio';
           source.originUrl = source.url;
+          source.originArtist = vkMeta?.artist || '';
+          source.originTitle = vkMeta?.title || '';
+
+          let found = null;
+          let resolved = null;
+          const failures = [];
+          for (const candidate of candidates) {
+            try {
+              resolved = await resolveYouTube(candidate.videoId);
+              found = candidate;
+              break;
+            } catch (error) {
+              failures.push(`${candidate.videoId}: ${error.message}`);
+            }
+          }
+          if (!found) {
+            found = candidates[0];
+            source.playbackError = failures[0] || 'YouTube не отдал аудиопоток';
+          }
+
           source.type = 'youtube';
           source.videoId = found.videoId;
           source.url = `https://www.youtube.com/watch?v=${found.videoId}`;
-          source.title = found.title || source.title;
-          source.duration = found.duration || 0;
-          try {
-            const resolved = await resolveYouTube(found.videoId);
-            source.title = resolved.title || source.title;
+          source.title =
+            vkMeta?.artist && vkMeta?.title
+              ? `${vkMeta.artist} — ${vkMeta.title}`
+              : found.title || source.title;
+          source.duration = vkMeta?.duration || resolved?.duration || found.duration || 0;
+          if (resolved) {
             source.duration = resolved.duration || source.duration;
             playback = { streamUrl: resolved.streamUrl, expiresAt: resolved.expiresAt };
-          } catch (error) {
-            // Как и для обычного YouTube, оставляем запасной IFrame-плеер.
-            console.warn('[music] VK Music → YouTube stream:', error.message);
-            source.playbackError = String(error.message || 'YouTube не отдал аудиопоток');
+          } else {
+            console.warn('[music] VK Music → YouTube stream:', source.playbackError);
           }
         } catch (error) {
           return fail(res, `Не удалось найти трек VK Music: ${error.message}`, 502);

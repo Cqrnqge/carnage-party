@@ -59,6 +59,27 @@ function vkVideoIdFromUrl(value) {
   return '';
 }
 
+function vkAudioIdFromUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    const host = url.hostname.replace(/^www\./i, '').toLowerCase();
+    const isVkHost =
+      host === 'vk.com' ||
+      host.endsWith('.vk.com') ||
+      host === 'vk.ru' ||
+      host.endsWith('.vk.ru');
+    if (!isVkHost) return '';
+    // Прямая ссылка на трек: /audio-2001829214_152829214
+    const direct = url.pathname.match(/^\/audio-?(\d+)_(\d+)(?:\/|$)/i);
+    if (direct) return `${direct[1]}_${direct[2]}`;
+    // Старый формат: /audio?z=audio_2001829214_152829214
+    const z = url.searchParams.get('z') || url.searchParams.get('audio') || '';
+    const legacy = String(z).match(/^audio[_-]?(\d+)_(\d+)$/i);
+    if (legacy) return `${legacy[1]}_${legacy[2]}`;
+  } catch {}
+  return '';
+}
+
 function vkAudioQueryFromUrl(value) {
   try {
     const url = new URL(String(value || '').trim());
@@ -135,6 +156,21 @@ function parseMusicSource(raw) {
     };
   }
 
+  // Прямая ссылка на трек VK Music: без авторизации VK не отдаёт mp3,
+  // поэтому название берём из метаданных страницы и ищем трек на YouTube.
+  const vkAudioId = vkAudioIdFromUrl(url);
+  if (vkAudioId) {
+    return {
+      type: 'vk-audio',
+      url,
+      videoId: null,
+      audioId: vkAudioId,
+      query: '',
+      title: providedTitle || 'VK Music',
+      live: false,
+    };
+  }
+
   // Ссылка на поиск VK Music: без авторизации VK не отдаёт mp3, поэтому
   // трек ищется на YouTube, а играется через уже готовый прокси.
   const vkAudioQuery = vkAudioQueryFromUrl(url);
@@ -201,6 +237,7 @@ module.exports = {
   youtubeIdFromUrl,
   rutubeIdFromUrl,
   vkVideoIdFromUrl,
+  vkAudioIdFromUrl,
   vkAudioQueryFromUrl,
   parseMusicSource,
   musicDTO,

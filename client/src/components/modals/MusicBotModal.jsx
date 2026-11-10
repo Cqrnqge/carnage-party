@@ -319,7 +319,7 @@ export default function MusicBotModal({ channelId, serverId } = {}) {
                 if (file) setFile(null);
                 if (error) setError('');
               }}
-              placeholder="https://youtube.com/watch?v=…, rutube.ru/video/…, vkvideo.ru/video…, vk.ru/audio?q=… или радио"
+              placeholder="https://youtube.com/watch?v=…, rutube.ru/video/…, vkvideo.ru/video…, vk.ru/audio-… или радио"
               inputMode="url"
               autoFocus
               aria-label="Ссылка на музыку"

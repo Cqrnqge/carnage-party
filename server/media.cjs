@@ -12,13 +12,24 @@ const USER_AGENT =
 const YOUTUBE_TTL = 60 * 60 * 1000;
 const RUTUBE_TTL = 10 * 60 * 1000;
 const VK_TTL = 30 * 60 * 1000;
+const VK_AUDIO_TTL = 30 * 60 * 1000;
 // YouTube периодически меняет требования к клиентам. Пробуем несколько
 // клиентов подряд: если один получает отказ или не отдаёт ссылку, следующий
 // часто всё равно работает. VISIONOS отдаёт готовую ссылку без расшифровки
 // подписи и разрешает читать файл с любого смещения. IOS и ANDROID_VR тоже
 // отдают ссылку, но у них она часто ограничена первым мегабайтом — такие
 // ссылки браузер воспроизвести не может.
-const YOUTUBE_CLIENTS = ['VISIONOS', 'IOS', 'ANDROID_VR', 'MWEB', 'ANDROID', 'WEB', 'TV'];
+const YOUTUBE_CLIENTS = [
+  'VISIONOS',
+  'IOS',
+  'ANDROID_VR',
+  'MWEB',
+  'ANDROID',
+  'WEB',
+  'TV',
+  'WEB_EMBEDDED',
+  'TV_EMBEDDED',
+];
 const YOUTUBE_PROBE_BYTES = 1024;
 
 const DNS_TTL = 5 * 60 * 1000;
@@ -268,6 +279,8 @@ const youtubePending = new Map();
 const rutubeCache = new Map();
 const vkCache = new Map();
 const vkPending = new Map();
+const vkAudioCache = new Map();
+const vkAudioPending = new Map();
 
 // youtubei.js передаёт свой Request-объект, который undici не понимает
 // напрямую. Приводим его к URL + параметрам и сохраняем устойчивый DNS.
@@ -447,41 +460,8 @@ function searchVideoDuration(video) {
 // Ищет трек на YouTube. Используется как запасной путь для ссылок VK Music:
 // анонимный VK не отдаёт поиск аудио и прямые mp3.
 async function searchYouTube(query, { force = false } = {}) {
-  const text = String(query || '').replace(/\s+/g, ' ').trim().slice(0, 200);
-  if (!text) throw new Error('Не указан поисковый запрос');
-
-  const key = text.toLowerCase();
-  const cached = youtubeSearchCache.get(key);
-  if (!force && cached && Date.now() - cached.at < YOUTUBE_SEARCH_TTL) return cached;
-
-  const yt = await getInnertube();
-  const results = await yt.search(text, { type: 'video' });
-  const videos = Array.isArray(results?.videos) ? results.videos : [];
-  let fallback = null;
-
-  for (const video of videos) {
-    const id = String(video?.video_id || video?.id || '').trim();
-    if (!/^[a-zA-Z0-9_-]{6,20}$/.test(id)) continue;
-    const entry = {
-      videoId: id,
-      title:
-        String(video?.title?.toString?.() || video?.title || '').trim().slice(0, 200) || text,
-      duration: searchVideoDuration(video),
-      author: String(video?.author?.name || '').trim().slice(0, 120),
-      live: Boolean(video?.is_live),
-      at: Date.now(),
-    };
-    if (!fallback) fallback = entry;
-    if (entry.live) continue;
-    youtubeSearchCache.set(key, entry);
-    return entry;
-  }
-
-  if (fallback) {
-    youtubeSearchCache.set(key, fallback);
-    return fallback;
-  }
-  throw new Error('YouTube не нашёл подходящий трек');
+  const items = await searchYouTubeCandidates(query, { force, limit: 5 });
+  return items.find((item) => !item.live) || items[0];
 }
 
 function wait(ms) {
@@ -753,6 +733,215 @@ async function resolveVk(videoId, { force = false } = {}) {
   return task;
 }
 
+// VK Music: прямой ссылки на mp3 без авторизации нет, но страница трека
+// отдаёт метаданные поисковым ботам. По ним находим трек на YouTube.
+const VK_AUDIO_USER_AGENTS = [
+  'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+  'Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)',
+  'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+];
+
+function decodeVkHtml(buffer, contentType = '') {
+  const head = buffer.subarray(0, 4096).toString('latin1');
+  const charset =
+    (head.match(/charset=["']?([\w-]+)/i) || [])[1] ||
+    (String(contentType).match(/charset=["']?([\w-]+)/i) || [])[1] ||
+    '';
+  if (/1251/i.test(charset)) {
+    try {
+      return new TextDecoder('windows-1251').decode(buffer);
+    } catch {}
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+  } catch {
+    try {
+      return new TextDecoder('windows-1251').decode(buffer);
+    } catch {
+      return buffer.toString('utf8');
+    }
+  }
+}
+
+function readHtmlMeta(text) {
+  const meta = new Map();
+  for (const match of String(text).matchAll(/<meta\b[^>]*>/gi)) {
+    const tag = match[0];
+    const key = (tag.match(/\b(?:property|name)=["']([^"']+)["']/i) || [])[1];
+    const content = (tag.match(/\bcontent=["']([^"']*)["']/i) || [])[1];
+    if (key) meta.set(key.toLowerCase(), decodeHtmlEntities(content));
+  }
+  return meta;
+}
+
+function parseVkDuration(value) {
+  const text = String(value || '').trim();
+  if (!text) return 0;
+  if (/^\d+(?:\.\d+)?$/.test(text)) return Math.max(0, Math.round(Number(text)));
+  const match = text.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/i);
+  if (!match) return 0;
+  const hours = Number(match[1]) || 0;
+  const minutes = Number(match[2]) || 0;
+  const seconds = Number(match[3]) || 0;
+  return Math.max(0, Math.round(hours * 3600 + minutes * 60 + seconds));
+}
+
+function parseVkAudioPage(text, audioId, pageUrl) {
+  const meta = readHtmlMeta(text);
+  let recording = null;
+  for (const match of String(text).matchAll(
+    /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
+  )) {
+    try {
+      const data = JSON.parse(match[1]);
+      const list = Array.isArray(data) ? data : [data];
+      const found = list.find(
+        (item) => item && String(item['@type'] || '').toLowerCase() === 'musicrecording'
+      );
+      if (found) {
+        recording = found;
+        break;
+      }
+    } catch {}
+  }
+
+  const artist = decodeHtmlEntities(
+    recording?.byArtist?.name ||
+      (Array.isArray(recording?.byArtist) ? recording.byArtist[0]?.name : '') ||
+      meta.get('og:music:musician') ||
+      ''
+  ).slice(0, 120);
+
+  let title = decodeHtmlEntities(
+    recording?.recordingOf?.name ||
+      recording?.name ||
+      meta.get('og:title') ||
+      ''
+  ).slice(0, 200);
+  // og:title у VK выглядит как «Артист: Трек: слушать онлайн | ВКонтакте».
+  title = title
+    .replace(/\s*:\s*слушать онлайн.*$/i, '')
+    .replace(/\s*\|\s*ВКонтакте\s*$/i, '')
+    .trim();
+  if (artist && title.toLowerCase().startsWith(`${artist.toLowerCase()}:`)) {
+    title = title.slice(artist.length + 1).trim();
+  }
+  if (!title && artist) title = artist;
+
+  const duration = parseVkDuration(
+    meta.get('og:music:duration') || recording?.duration || ''
+  );
+  const query = [artist, title]
+    .map((part) => String(part || '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 200);
+
+  return {
+    audioId,
+    url: pageUrl,
+    artist,
+    title,
+    duration,
+    query,
+  };
+}
+
+async function fetchVkAudioMetadata(audioId) {
+  const pageUrl = `https://vk.com/audio-${audioId}`;
+  let lastError = null;
+  for (const userAgent of VK_AUDIO_USER_AGENTS) {
+    try {
+      const response = await fetchWithFallback(
+        pageUrl,
+        {
+          headers: {
+            'user-agent': userAgent,
+            'accept-language': 'ru-RU,ru;q=0.9,en;q=0.8',
+            accept: 'text/html,application/xhtml+xml',
+          },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(15_000),
+        },
+        4
+      );
+      if (!response.ok) {
+        lastError = new Error(`VK ответил ошибкой ${response.status}`);
+        continue;
+      }
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const html = decodeVkHtml(buffer, response.headers.get('content-type') || '');
+      const data = parseVkAudioPage(html, audioId, pageUrl);
+      if (!data.query) {
+        lastError = new Error('VK не отдал название трека');
+        continue;
+      }
+      return data;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error('VK не отдал данные трека');
+}
+
+async function resolveVkAudio(audioId, { force = false } = {}) {
+  const id = String(audioId || '').trim();
+  if (!/^-?\d+_\d+$/.test(id)) throw new Error('Некорректная ссылка VK Music');
+
+  const cached = vkAudioCache.get(id);
+  if (!force && cached && cached.expiresAt > Date.now() + 60_000) return cached;
+  if (!force && vkAudioPending.has(id)) return vkAudioPending.get(id);
+
+  const task = (async () => {
+    const data = await fetchVkAudioMetadata(id);
+    const entry = { ...data, expiresAt: Date.now() + VK_AUDIO_TTL };
+    vkAudioCache.set(id, entry);
+    return entry;
+  })().finally(() => vkAudioPending.delete(id));
+
+  vkAudioPending.set(id, task);
+  return task;
+}
+
+// Несколько результатов поиска нужны, когда первый ролик на YouTube
+// оказывается недоступен или ломает парсер youtubei.js.
+function searchYouTubeCandidates(query, { force = false, limit = 5 } = {}) {
+  const text = String(query || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!text) return Promise.reject(new Error('Не указан поисковый запрос'));
+
+  const key = text.toLowerCase();
+  const cached = youtubeSearchCache.get(key);
+  if (!force && cached && Array.isArray(cached.items) && Date.now() - cached.at < YOUTUBE_SEARCH_TTL) {
+    return Promise.resolve(cached.items.slice(0, limit));
+  }
+
+  return (async () => {
+    const yt = await getInnertube();
+    const results = await yt.search(text, { type: 'video' });
+    const videos = Array.isArray(results?.videos) ? results.videos : [];
+    const items = [];
+    const seen = new Set();
+    for (const video of videos) {
+      const id = String(video?.video_id || video?.id || '').trim();
+      if (!/^[a-zA-Z0-9_-]{6,20}$/.test(id) || seen.has(id)) continue;
+      seen.add(id);
+      items.push({
+        videoId: id,
+        title:
+          String(video?.title?.toString?.() || video?.title || '').trim().slice(0, 200) || text,
+        duration: searchVideoDuration(video),
+        author: String(video?.author?.name || '').trim().slice(0, 120),
+        live: Boolean(video?.is_live),
+        at: Date.now(),
+      });
+      if (items.length >= Math.max(1, Math.min(10, limit))) break;
+    }
+    if (!items.length) throw new Error('YouTube не нашёл подходящий трек');
+    youtubeSearchCache.set(key, { items, at: Date.now() });
+    return items;
+  })();
+}
+
 function isAllowedUpstream(value) {
   try {
     const url = new URL(String(value || ''));
@@ -866,8 +1055,10 @@ module.exports = {
   USER_AGENT,
   resolveYouTube,
   searchYouTube,
+  searchYouTubeCandidates,
   resolveRutube,
   resolveVk,
+  resolveVkAudio,
   isAllowedUpstream,
   fetchUpstream,
   pipeResponse,
