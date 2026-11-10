@@ -33,6 +33,32 @@ function rutubeIdFromUrl(value) {
   return '';
 }
 
+function vkVideoIdFromUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    const host = url.hostname.replace(/^www\./i, '').toLowerCase();
+    const isVkHost =
+      host === 'vk.com' ||
+      host.endsWith('.vk.com') ||
+      host === 'vkvideo.ru' ||
+      host.endsWith('.vkvideo.ru') ||
+      host === 'vk.ru' ||
+      host.endsWith('.vk.ru');
+    if (!isVkHost) return '';
+
+    if (url.pathname === '/video_ext.php' || url.pathname === '/video.php') {
+      const oid = url.searchParams.get('oid') || '';
+      const id = url.searchParams.get('id') || '';
+      if (/^-?\d+$/.test(oid) && /^\d+$/.test(id)) return `${oid}_${id}`;
+      return '';
+    }
+
+    const match = url.pathname.match(/^\/video(-?\d+)_(\d+)(?:\/|$)/i);
+    if (match) return `${match[1]}_${match[2]}`;
+  } catch {}
+  return '';
+}
+
 function prettyUrlTitle(url) {
   try {
     const parsed = new URL(url);
@@ -75,6 +101,18 @@ function parseMusicSource(raw) {
     };
   }
 
+  const vkId = vkVideoIdFromUrl(url);
+  if (vkId) {
+    const [owner, video] = vkId.split('_');
+    return {
+      type: 'vk',
+      url: `https://vk.com/video${owner}_${video}`,
+      videoId: vkId,
+      title: providedTitle || 'VK Видео',
+      live: false,
+    };
+  }
+
   const cleanPath = url.split('#')[0].split('?')[0].toLowerCase();
   let type = 'radio';
   if (/\.m3u8$/.test(cleanPath)) type = 'hls';
@@ -100,6 +138,9 @@ function musicDTO(session, bot, serverNow = Date.now()) {
     if (source.type === 'youtube' && session.playback.streamUrl) {
       source.streamUrl = `/api/music/stream/${session.botId}?key=${session.streamKey}`;
     }
+    if (source.type === 'vk' && session.playback.streamUrl) {
+      source.streamUrl = `/api/music/stream/${session.botId}?key=${session.streamKey}`;
+    }
     if (source.type === 'rutube' && session.playback.hlsUpstream) {
       source.hlsUrl = `/api/music/hls/${session.botId}?key=${session.streamKey}`;
     }
@@ -123,6 +164,7 @@ function musicDTO(session, bot, serverNow = Date.now()) {
 module.exports = {
   youtubeIdFromUrl,
   rutubeIdFromUrl,
+  vkVideoIdFromUrl,
   parseMusicSource,
   musicDTO,
   prettyUrlTitle,

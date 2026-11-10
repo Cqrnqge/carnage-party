@@ -8,6 +8,7 @@ import {
   Loader2,
   Play,
   Tv,
+  Video,
 } from 'lucide-react';
 import { useApp } from '../../store';
 import { watchManager } from '../../watch';
@@ -16,6 +17,7 @@ import Modal from '../ui/Modal';
 function guessSourceType(url) {
   const value = String(url || '').trim();
   if (/(?:youtube\.com|youtu\.be)/i.test(value)) return 'youtube';
+  if (/vk(?:video)?\.(?:com|ru)\/video[-_?/\d]/i.test(value)) return 'vk';
   return 'url';
 }
 
@@ -106,7 +108,7 @@ export default function WatchPartySetupModal({ channelId = null, channelName = '
                 setUrl(event.target.value);
                 if (error) setError('');
               }}
-              placeholder="https://youtube.com/watch?v=… или https://…/video.mp4"
+              placeholder="https://youtube.com/watch?v=…, vkvideo.ru/video… или https://…/video.mp4"
               inputMode="url"
               maxLength={2048}
               disabled={busy}
@@ -120,6 +122,7 @@ export default function WatchPartySetupModal({ channelId = null, channelName = '
           </div>
           <div className="watch-setup-hints">
             <span className="watch-setup-chip"><Play size={12} /> YouTube</span>
+            <span className="watch-setup-chip"><Video size={12} /> VK Видео</span>
             <span className="watch-setup-chip"><Clapperboard size={12} /> Клипы и Shorts</span>
             <span className="watch-setup-chip"><Film size={12} /> MP4 и WebM</span>
             <span className="watch-setup-chip"><Link2 size={12} /> youtu.be</span>

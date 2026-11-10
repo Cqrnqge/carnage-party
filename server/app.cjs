@@ -32,10 +32,11 @@ const { makeSerializers } = require('./serializers.cjs');
 const { updateInfo } = require('./updates.cjs');
 const { makeIceConfig } = require('./ice.cjs');
 const { createPushService } = require('./push.cjs');
-const { parseMusicSource, musicDTO } = require('./music.cjs');
+const { parseMusicSource, musicDTO, vkVideoIdFromUrl } = require('./music.cjs');
 const {
   resolveYouTube,
   resolveRutube,
+  resolveVk,
   isAllowedUpstream,
   fetchUpstream,
   pipeResponse,
@@ -735,19 +736,31 @@ function startServer(options = {}) {
 
   function sanitizeWatchSource(raw) {
     if (!raw || typeof raw !== 'object') return null;
-    const type = raw.type === 'youtube' ? 'youtube' : raw.type === 'url' ? 'url' : '';
     const url = String(raw.url || '').trim().slice(0, 2048);
-    if (!type || !/^https?:\/\//i.test(url)) return null;
-    if (type === 'youtube') {
-      const videoId = youtubeIdFromUrl(url);
-      if (!videoId) return null;
+    if (!/^https?:\/\//i.test(url)) return null;
+
+    const youtubeVideoId = youtubeIdFromUrl(url);
+    if (youtubeVideoId) {
       return {
         type: 'youtube',
-        url: `https://www.youtube.com/watch?v=${videoId}`,
-        videoId,
+        url: `https://www.youtube.com/watch?v=${youtubeVideoId}`,
+        videoId: youtubeVideoId,
         duration: Math.max(0, Math.round(Number(raw.duration) || 0)),
       };
     }
+
+    const vkId = vkVideoIdFromUrl(url);
+    if (vkId) {
+      const [owner, video] = vkId.split('_');
+      return {
+        type: 'vk',
+        url: `https://vk.com/video${owner}_${video}`,
+        videoId: vkId,
+        duration: Math.max(0, Math.round(Number(raw.duration) || 0)),
+      };
+    }
+
+    if (raw.type === 'youtube' || raw.type === 'vk') return null;
     return {
       type: 'url',
       url,
@@ -772,13 +785,17 @@ function startServer(options = {}) {
   }
 
   function watchPublic(room) {
+    const source = room.source ? { ...room.source } : room.source;
+    if (source?.type === 'vk' && room.streamKey) {
+      source.streamUrl = `/api/watch/${room.id}/stream?key=${room.streamKey}`;
+    }
     return {
       id: room.id,
       title: room.title,
       channelId: room.channelId,
       hostId: room.hostId,
       host: ser.publicUser(db.user(room.hostId)),
-      source: room.source,
+      source,
       state: { ...room.state },
       participants: room.participants.size,
       live: Boolean(room.hostSocketId),
@@ -2253,7 +2270,7 @@ function startServer(options = {}) {
     if (!canAccessChannel(req.user.id, channel)) return fail(res, 'Нет доступа к каналу', 403);
 
     const source = sanitizeWatchSource(req.body?.source);
-    if (!source) return fail(res, 'Нужна ссылка на YouTube или прямой видеофайл', 400);
+    if (!source) return fail(res, 'Нужна ссылка на YouTube, VK Видео или прямой видеофайл', 400);
 
     // В одном канале — одна активная комната, у пользователя — тоже одна.
     for (const existing of [...watchRooms.values()]) {
@@ -2268,6 +2285,8 @@ function startServer(options = {}) {
       channelId,
       title,
       source,
+      streamKey: source.type === 'vk' ? crypto.randomBytes(16).toString('hex') : null,
+      playback: null,
       state: { playing: false, position: 0, rate: 1, updatedAt: Date.now(), revision: 1 },
       participants: new Map(),
       chat: [],
@@ -2291,6 +2310,60 @@ function startServer(options = {}) {
     res.setHeader('Cache-Control', 'no-store');
     res.json({ room: watchPublic(room) });
   });
+
+  // Прокси видео VK: прямые ссылки VK привязаны к IP сервера и истекают,
+  // поэтому участники Watch Party получают поток только через этот маршрут.
+  app.get(
+    '/api/watch/:id/stream',
+    wrap(async (req, res) => {
+      const room = watchRooms.get(String(req.params.id || ''));
+      if (!room || !room.streamKey || String(req.query.key || '') !== room.streamKey) {
+        return fail(res, 'Поток недоступен', 403);
+      }
+      if (room.source?.type !== 'vk') return fail(res, 'Это не VK-поток', 404);
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const stale =
+          !room.playback?.streamUrl || room.playback.expiresAt <= Date.now() + 60_000;
+        if (stale) {
+          try {
+            const resolved = await resolveVk(room.source.videoId, { force: attempt > 0 });
+            room.playback = {
+              streamUrl: resolved.streamUrl,
+              expiresAt: resolved.expiresAt,
+            };
+            if (!room.source.duration && resolved.duration) {
+              room.source.duration = resolved.duration;
+            }
+            if (!room.source.title || room.source.title === 'VK Видео') {
+              room.source.title = resolved.title;
+            }
+          } catch (error) {
+            return fail(res, `VK не отдал видео: ${error.message}`, 502);
+          }
+        }
+        const upstream = await fetchUpstream(req, room.playback.streamUrl, {
+          headers: { referer: 'https://vk.com/' },
+        });
+        if ([401, 403, 410].includes(upstream.status) && attempt === 0) {
+          try {
+            await upstream.body?.cancel();
+          } catch {}
+          room.playback = null;
+          continue;
+        }
+        if (!upstream.ok && upstream.status !== 206) {
+          try {
+            await upstream.body?.cancel();
+          } catch {}
+          return fail(res, `VK не отдал видео (HTTP ${upstream.status})`, 502);
+        }
+        pipeResponse(res, upstream);
+        return;
+      }
+      return fail(res, 'VK не отдал видео', 502);
+    })
+  );
 
   app.delete('/api/watch/:id', auth, (req, res) => {
     const room = watchRooms.get(String(req.params.id || ''));
@@ -2493,6 +2566,19 @@ function startServer(options = {}) {
         } catch (error) {
           return fail(res, `Не удалось открыть Rutube: ${error.message}`);
         }
+      } else if (source.type === 'vk') {
+        try {
+          const resolved = await resolveVk(source.videoId);
+          source.title = resolved.title || source.title;
+          source.duration = resolved.duration || 0;
+          source.live = resolved.live;
+          playback = {
+            streamUrl: resolved.streamUrl,
+            expiresAt: resolved.expiresAt,
+          };
+        } catch (error) {
+          return fail(res, `Не удалось открыть VK Видео: ${error.message}`);
+        }
       }
 
       const session = startMusicSession({
@@ -2564,8 +2650,9 @@ function startServer(options = {}) {
     })
   );
 
-  // Прокси аудиопотока YouTube: клиент получает один и тот же URL для всех участников,
-  // а сервер сам обновляет временную ссылку googlevideo при истечении.
+  // Прокси медиапотока бота: YouTube-аудио и VK-видео. Клиент получает один
+  // и тот же URL для всех участников, а сервер сам обновляет временную ссылку
+  // источника при истечении.
   app.get(
     '/api/music/stream/:botId',
     wrap(async (req, res) => {
@@ -2573,23 +2660,35 @@ function startServer(options = {}) {
       if (!session || !session.streamKey || String(req.query.key || '') !== session.streamKey) {
         return fail(res, 'Поток недоступен', 403);
       }
-      if (session.source?.type !== 'youtube') return fail(res, 'Это не YouTube-поток', 404);
+      const sourceType = session.source?.type;
+      if (sourceType !== 'youtube' && sourceType !== 'vk') {
+        return fail(res, 'Это не медиапоток', 404);
+      }
+      const isVk = sourceType === 'vk';
+      const label = isVk ? 'VK Видео' : 'YouTube';
+      const what = isVk ? 'видео' : 'аудиопоток';
 
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const stale =
           !session.playback?.streamUrl || session.playback.expiresAt <= Date.now() + 60_000;
         if (stale) {
           try {
-            const resolved = await resolveYouTube(session.source.videoId, { force: attempt > 0 });
+            const resolved = isVk
+              ? await resolveVk(session.source.videoId, { force: attempt > 0 })
+              : await resolveYouTube(session.source.videoId, { force: attempt > 0 });
             session.playback = {
               streamUrl: resolved.streamUrl,
               expiresAt: resolved.expiresAt,
             };
           } catch (error) {
-            return fail(res, `YouTube не отдал аудиопоток: ${error.message}`, 502);
+            return fail(res, `${label} не отдал ${what}: ${error.message}`, 502);
           }
         }
-        const upstream = await fetchUpstream(req, session.playback.streamUrl);
+        const upstream = await fetchUpstream(
+          req,
+          session.playback.streamUrl,
+          isVk ? { headers: { referer: 'https://vk.com/' } } : {}
+        );
         if ([401, 403, 410].includes(upstream.status) && attempt === 0) {
           try {
             await upstream.body?.cancel();
@@ -2599,7 +2698,7 @@ function startServer(options = {}) {
         }
         if (!upstream.ok && upstream.status !== 206) {
           console.warn(
-            '[music] YouTube upstream:',
+            `[music] ${label} upstream:`,
             upstream.status,
             'range:',
             req.headers.range || '-',
@@ -2615,12 +2714,12 @@ function startServer(options = {}) {
           try {
             await upstream.body?.cancel();
           } catch {}
-          return fail(res, `YouTube не отдал аудиопоток (HTTP ${upstream.status})`, 502);
+          return fail(res, `${label} не отдал ${what} (HTTP ${upstream.status})`, 502);
         }
         pipeResponse(res, upstream);
         return;
       }
-      return fail(res, 'YouTube не отдал аудиопоток', 502);
+      return fail(res, `${label} не отдал ${what}`, 502);
     })
   );
 
@@ -3267,11 +3366,16 @@ function startServer(options = {}) {
       }
       const source = sanitizeWatchSource(payload.source);
       if (!source) {
-        if (typeof ack === 'function') ack({ ok: false, error: 'Нужна ссылка на YouTube, видео или сайт' });
+        if (typeof ack === 'function') ack({ ok: false, error: 'Нужна ссылка на YouTube, VK Видео, видео или сайт' });
         return;
       }
       socket.data.lastWatchSourceAt = now;
       room.source = source;
+      room.streamKey =
+        source.type === 'vk'
+          ? room.streamKey || crypto.randomBytes(16).toString('hex')
+          : null;
+      room.playback = null;
       room.state = {
         playing: false,
         position: 0,

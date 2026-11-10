@@ -142,7 +142,9 @@ export default function WatchPartyView({ roomId } = {}) {
   const isHost = Boolean(self?.host);
 
   const canWebview = typeof window !== 'undefined' && Boolean(window.desktop);
-  const isDirectVideo = room?.source?.type === 'url' && isDirectVideoUrl(room.source.url);
+  const isVkVideo = room?.source?.type === 'vk';
+  const isDirectVideo =
+    isVkVideo || (room?.source?.type === 'url' && isDirectVideoUrl(room.source.url));
   const isWebPage = room?.source?.type === 'url' && !isDirectVideo;
   const useYouTubeWebview = room?.source?.type === 'youtube' && webviewFallback && canWebview;
   const useWebview = useYouTubeWebview || (isWebPage && canWebview);
@@ -271,7 +273,10 @@ export default function WatchPartyView({ roomId } = {}) {
   }, [room?.source?.type, room?.source?.videoId, webviewFallback, canWebview]);
 
   useEffect(() => {
-    if (room?.source?.type !== 'url' || !videoRef.current) return undefined;
+    const direct =
+      room?.source?.type === 'vk' ||
+      (room?.source?.type === 'url' && isDirectVideoUrl(room.source.url));
+    if (!direct || !videoRef.current) return undefined;
     const video = videoRef.current;
     const onLoaded = () => {
       setPlayerReady(true);
@@ -290,12 +295,21 @@ export default function WatchPartyView({ roomId } = {}) {
       watchManager.setBuffering(false);
     };
     const onEnded = () => setPlaying(false);
+    const onError = () => {
+      setPlayerReady(false);
+      setPlayerError(
+        room?.source?.type === 'vk'
+          ? 'Не удалось открыть VK Видео. Проверьте ссылку или попробуйте позже.'
+          : 'Не удалось открыть видео по ссылке.'
+      );
+    };
     video.addEventListener('loadedmetadata', onLoaded);
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
     video.addEventListener('waiting', onWaiting);
     video.addEventListener('playing', onPlaying);
     video.addEventListener('ended', onEnded);
+    video.addEventListener('error', onError);
     return () => {
       video.removeEventListener('loadedmetadata', onLoaded);
       video.removeEventListener('play', onPlay);
@@ -303,8 +317,9 @@ export default function WatchPartyView({ roomId } = {}) {
       video.removeEventListener('waiting', onWaiting);
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('ended', onEnded);
+      video.removeEventListener('error', onError);
     };
-  }, [room?.source?.type, room?.source?.url]);
+  }, [room?.source?.type, room?.source?.url, room?.source?.streamUrl]);
 
   // Встроенный браузер: YouTube-страница или любой другой сайт.
   useEffect(() => {
@@ -905,7 +920,12 @@ export default function WatchPartyView({ roomId } = {}) {
           <div className="watch-player">
             <div className="watch-player-media" ref={mediaRef}>
               {isDirectVideo ? (
-                <video ref={videoRef} src={room.source.url} playsInline preload="auto" />
+                <video
+                  ref={videoRef}
+                  src={isVkVideo ? room.source.streamUrl : room.source.url}
+                  playsInline
+                  preload="auto"
+                />
               ) : null}
             </div>
             {useWebview ? (
@@ -941,7 +961,12 @@ export default function WatchPartyView({ roomId } = {}) {
                 <strong>{playerError}</strong>
                 <span>Ссылку может сменить любой участник комнаты.</span>
                 <button type="button" className="btn btn-primary btn-small" onClick={() => openExternal(room.source.url)}>
-                  <ExternalLink size={14} /> {room.source?.type === 'youtube' ? 'Открыть на YouTube' : 'Открыть ссылку'}
+                  <ExternalLink size={14} />{' '}
+                  {room.source?.type === 'youtube'
+                    ? 'Открыть на YouTube'
+                    : room.source?.type === 'vk'
+                      ? 'Открыть на VK Видео'
+                      : 'Открыть ссылку'}
                 </button>
               </div>
             ) : null}

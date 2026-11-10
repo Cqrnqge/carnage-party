@@ -11,6 +11,7 @@ const USER_AGENT =
 
 const YOUTUBE_TTL = 60 * 60 * 1000;
 const RUTUBE_TTL = 10 * 60 * 1000;
+const VK_TTL = 30 * 60 * 1000;
 // YouTube периодически меняет требования к клиентам. Пробуем несколько
 // клиентов подряд: если один получает отказ или не отдаёт ссылку, следующий
 // часто всё равно работает. VISIONOS отдаёт готовую ссылку без расшифровки
@@ -265,6 +266,8 @@ let innertubePromise = null;
 const youtubeCache = new Map();
 const youtubePending = new Map();
 const rutubeCache = new Map();
+const vkCache = new Map();
+const vkPending = new Map();
 
 // youtubei.js передаёт свой Request-объект, который undici не понимает
 // напрямую. Приводим его к URL + параметрам и сохраняем устойчивый DNS.
@@ -556,6 +559,146 @@ async function resolveRutube(videoId, { force = false } = {}) {
   return entry;
 }
 
+function decodeHtmlEntities(value) {
+  return String(value || '')
+    .replace(/&#(\d+);/g, (_match, code) => {
+      try {
+        return String.fromCodePoint(Number(code));
+      } catch {
+        return '';
+      }
+    })
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code) => {
+      try {
+        return String.fromCodePoint(parseInt(code, 16));
+      } catch {
+        return '';
+      }
+    })
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// VK складывает данные плеера в payload[1], но структура меняется: иногда это
+// массив, иногда объект с числовыми ключами. Ищем её рекурсивно.
+function findVkPlayerData(root, depth = 0) {
+  if (!root || typeof root !== 'object' || depth > 6) return null;
+  if (root.player && Array.isArray(root.player.params) && root.player.params[0]) return root;
+  if (root.player && root.player.params && typeof root.player.params === 'object') return root;
+  for (const value of Object.values(root)) {
+    const found = findVkPlayerData(value, depth + 1);
+    if (found) return found;
+  }
+  return null;
+}
+
+async function fetchVkPlayer(videoId) {
+  const body = new URLSearchParams({
+    act: 'show',
+    video: videoId,
+    al: '1',
+  }).toString();
+
+  const response = await fetchWithFallback(
+    'https://vk.com/al_video.php',
+    {
+      method: 'POST',
+      headers: {
+        'user-agent': USER_AGENT,
+        'accept-language': 'ru-RU,ru;q=0.9,en;q=0.8',
+        'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'x-requested-with': 'XMLHttpRequest',
+        referer: 'https://vk.com/al_video.php',
+        origin: 'https://vk.com',
+      },
+      body,
+      signal: AbortSignal.timeout(15_000),
+    },
+    4
+  );
+
+  if (!response.ok) throw new Error(`VK ответил ошибкой ${response.status}`);
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const contentType = String(response.headers.get('content-type') || '');
+  let text = buffer.toString('utf8');
+  // VK обычно отдаёт JSON в windows-1251: без правильной кодировки русский
+  // заголовок превращается в мусор. Если VK перейдёт на UTF-8 — не ломаемся.
+  try {
+    text = new TextDecoder(/charset=windows-1251/i.test(contentType) ? 'windows-1251' : 'utf-8').decode(buffer);
+  } catch {}
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('VK вернул некорректный ответ');
+  }
+
+  const payload = data?.payload?.[1] ?? data?.payload ?? data;
+  const entry = findVkPlayerData(payload);
+  if (!entry) throw new Error('VK не вернул данные плеера');
+  return entry;
+}
+
+async function resolveVk(videoId, { force = false } = {}) {
+  const id = String(videoId || '').trim();
+  if (!/^-?\d+_\d+$/.test(id)) throw new Error('Некорректная ссылка VK Видео');
+
+  const cached = vkCache.get(id);
+  if (!force && cached && cached.expiresAt > Date.now() + 60_000) return cached;
+  if (!force && vkPending.has(id)) return vkPending.get(id);
+
+  const task = (async () => {
+    const entry = await fetchVkPlayer(id);
+    const params = Array.isArray(entry.player?.params)
+      ? entry.player.params[0]
+      : entry.player?.params || {};
+    const mvData = entry.mvData || {};
+    const live = Boolean(mvData.is_live || mvData.is_active_live);
+
+    let streamUrl = '';
+    for (const key of ['url1080', 'url720', 'url480', 'url360', 'url240', 'url144']) {
+      if (params[key]) {
+        streamUrl = String(params[key]);
+        break;
+      }
+    }
+    if (!streamUrl) {
+      throw new Error(
+        live
+          ? 'прямые трансляции VK пока не поддерживаются'
+          : 'VK не отдал видеопоток'
+      );
+    }
+
+    let expiresAt = Date.now() + VK_TTL;
+    try {
+      const raw = Number(new URL(streamUrl).searchParams.get('expires'));
+      if (raw > 0) expiresAt = Math.min(expiresAt, raw);
+    } catch {}
+    if (expiresAt <= Date.now() + 60_000) expiresAt = Date.now() + VK_TTL;
+
+    const resolved = {
+      streamUrl,
+      title: decodeHtmlEntities(mvData.title || '').slice(0, 200) || 'VK Видео',
+      duration: Math.max(0, Math.round(Number(mvData.duration) || 0)),
+      live,
+      expiresAt,
+    };
+    vkCache.set(id, resolved);
+    return resolved;
+  })().finally(() => vkPending.delete(id));
+
+  vkPending.set(id, task);
+  return task;
+}
+
 function isAllowedUpstream(value) {
   try {
     const url = new URL(String(value || ''));
@@ -669,6 +812,7 @@ module.exports = {
   USER_AGENT,
   resolveYouTube,
   resolveRutube,
+  resolveVk,
   isAllowedUpstream,
   fetchUpstream,
   pipeResponse,

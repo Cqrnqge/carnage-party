@@ -213,7 +213,9 @@ export default function MusicPlayer() {
           setError(
             session?.source?.type === 'youtube'
               ? 'Не удалось воспроизвести аудиопоток YouTube'
-              : 'Не удалось воспроизвести аудио'
+              : session?.source?.type === 'vk'
+                ? 'Не удалось воспроизвести VK Видео'
+                : 'Не удалось воспроизвести аудио'
           );
         }
       });
