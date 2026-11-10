@@ -2475,7 +2475,9 @@ function startServer(options = {}) {
           playback = { streamUrl: resolved.streamUrl, expiresAt: resolved.expiresAt };
         } catch (error) {
           // Если YouTube не отдал прямой поток, клиент попробует IFrame-плеер.
+          // Причину сохраняем, чтобы показать её в плеере, а не общую ошибку.
           console.warn('[music] YouTube stream:', error.message);
+          source.playbackError = String(error.message || 'YouTube не отдал аудиопоток');
           if (!req.body.title) {
             const title = await youtubeTitle(source.videoId);
             if (title) source.title = title;

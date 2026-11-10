@@ -250,7 +250,12 @@ export default function MusicPlayer() {
                 if (event.data === YT.PlayerState.PLAYING) setBlocked(false);
                 if (event.data === YT.PlayerState.ENDED) setBlocked(false);
               },
-              onError: () => setError('YouTube не разрешил воспроизведение этого видео'),
+              onError: () =>
+                setError(
+                  source.playbackError
+                    ? `YouTube не разрешил воспроизведение: ${source.playbackError}`
+                    : 'YouTube не разрешил воспроизведение этого видео'
+                ),
             },
           });
           ytPlayerRef.current = player;

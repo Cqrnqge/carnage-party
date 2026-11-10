@@ -107,10 +107,10 @@ npm start
 После пункта **10** (или `npm run dist`) в папке `release`:
 
 ```
-release\Carnage-Party-Setup-1.2.2.exe      — установщик NSIS
-release\Carnage-Party-Portable-1.2.2.exe   — переносная версия
-release\Carnage-Party-Portable-1.2.2.zip   — ZIP для автообновления portable
-release\Carnage-Party-Mobile-1.2.2.apk     — Android
+release\Carnage-Party-Setup-1.2.3.exe      — установщик NSIS
+release\Carnage-Party-Portable-1.2.3.exe   — переносная версия
+release\Carnage-Party-Portable-1.2.3.zip   — ZIP для автообновления portable
+release\Carnage-Party-Mobile-1.2.3.apk     — Android
 ```
 
 Установщик позволяет выбрать папку, создаёт ярлыки на рабочем столе и в меню «Пуск».
@@ -223,7 +223,7 @@ npm start
    (командную строку нужно запустить от администратора)
 3. Для текстового чата адрес можно открыть в браузере: `http://188.234.161.207:3001`.
 4. Для **голоса, камеры и демонстрации экрана** браузеру нужен HTTPS: Chrome блокирует медиа на `http://IP`. Проще подключиться Electron-клиентом:
-   - в portable-версии адрес сервера уже указан по умолчанию — просто запустите `Carnage-Party-Portable-1.2.2.exe`;
+   - в portable-версии адрес сервера уже указан по умолчанию — просто запустите `Carnage-Party-Portable-1.2.3.exe`;
    - если адрес изменился, откройте в клиенте **Настройки → Сервер**, введите `http://<IP-хоста>:3001` и нажмите «Подключиться»;
    - либо запустите **`carnage.bat`**, пункт **6**, и введите адрес.
    Electron-клиент автоматически разрешает камеру/микрофон/экран для LAN-адреса.
