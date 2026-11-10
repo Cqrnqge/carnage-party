@@ -828,8 +828,14 @@ function startServer(options = {}) {
     if (room.emptyTimer) clearTimeout(room.emptyTimer);
     watchRooms.delete(roomId);
     watchIo.to(watchRoomName(roomId)).emit('watch:ended', { roomId, reason });
-    for (const socket of [...watchIo.sockets.values()]) {
-      if (socket.rooms.has(watchRoomName(roomId))) socket.disconnect(true);
+    const stragglers = [...watchIo.sockets.values()].filter((socket) =>
+      socket.rooms.has(watchRoomName(roomId))
+    );
+    if (stragglers.length) {
+      console.log(`[watch] end ${roomId} (${reason}) — disconnect ${stragglers.length} socket(s)`);
+    }
+    for (const socket of stragglers) {
+      socket.disconnect(true);
     }
     broadcastWatchUpdate(room, true);
     return true;
@@ -2925,9 +2931,9 @@ function startServer(options = {}) {
   io.on('connection', (socket) => {
     const userId = socket.data.userId;
     const user = db.user(userId);
-    console.log(`[socket] connect ${user?.username || userId}`);
+    console.log(`[socket] connect ${user?.username || userId} id=${socket.id}`);
     socket.on('disconnect', (reason) => {
-      console.log(`[socket] disconnect ${user?.username || userId}: ${reason}`);
+      console.log(`[socket] disconnect ${user?.username || userId} id=${socket.id}: ${reason}`);
     });
     if (!user) return socket.disconnect(true);
 
@@ -3328,6 +3334,10 @@ function startServer(options = {}) {
   watchIo.on('connection', (socket) => {
     const userId = socket.data.userId;
     const roomId = String(socket.handshake.auth?.roomId || '');
+    console.log(`[watch] connect ${userId} id=${socket.id} room=${roomId}`);
+    socket.on('disconnect', (reason) => {
+      console.log(`[watch] disconnect ${userId} id=${socket.id} room=${roomId}: ${reason}`);
+    });
     const room = watchRooms.get(roomId);
     if (!room) {
       socket.emit('watch:error', { error: 'Комната не найдена или уже завершилась' });

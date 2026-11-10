@@ -3,7 +3,7 @@
 const dns = require('node:dns');
 const https = require('node:https');
 const net = require('node:net');
-const { Readable } = require('node:stream');
+const { Readable, pipeline } = require('node:stream');
 const { Agent, fetch: undiciFetch } = require('undici');
 
 const USER_AGENT =
@@ -216,9 +216,12 @@ function getUpstreamAgent(family = 4) {
     upstreamAgents.set(
       family,
       new Agent({
-        connect: { lookup: familyLookup(family), family },
+        connect: { lookup: familyLookup(family), family, timeout: 15_000 },
         connections: 32,
         keepAliveTimeout: 30_000,
+        // Если удалённый сервер принял соединение, но не отдал заголовки,
+        // запрос не должен висеть минутами и занимать слот пула.
+        headersTimeout: 30_000,
       })
     );
   }
@@ -1005,17 +1008,20 @@ function pipeResponse(res, upstream) {
     return;
   }
   const body = Readable.fromWeb(upstream.body);
-  body.on('error', () => {
-    try {
-      res.destroy();
-    } catch {}
-  });
   res.on('close', () => {
     try {
       body.destroy();
     } catch {}
   });
-  body.pipe(res);
+  // pipeline, в отличие от pipe, снимает и читаемый, и записываемый поток
+  // при закрытии вкладки/выходе из комнаты. Иначе прерванный просмотр
+  // оставляет скачивание висеть и занимает соединение до конца файла.
+  pipeline(body, res, (error) => {
+    if (!error || error.code === 'ERR_STREAM_PREMATURE_CLOSE') return;
+    try {
+      res.destroy();
+    } catch {}
+  });
 }
 
 function isPlaylist(target, contentType) {

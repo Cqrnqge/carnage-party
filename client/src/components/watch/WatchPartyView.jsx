@@ -26,6 +26,7 @@ import {
 import { useApp } from '../../store';
 import { cx, formatTime, keyLabel } from '../../utils';
 import { voiceManager } from '../../voice';
+import { ensureSocketAlive } from '../../socket';
 import { copyText } from '../../stream-utils';
 import Avatar from '../ui/Avatar';
 import EmojiPicker from '../chat/EmojiPicker';
@@ -193,7 +194,12 @@ export default function WatchPartyView({ roomId } = {}) {
     return () => {
       unsubscribe();
       watchManager.leave();
+      ensureSocketAlive();
       if (gestureTimerRef.current) clearTimeout(gestureTimerRef.current);
+      if (rateTimerRef.current) clearTimeout(rateTimerRef.current);
+      try {
+        webviewRef.current?.stop?.();
+      } catch {}
     };
   }, [roomId]);
 
@@ -377,6 +383,8 @@ export default function WatchPartyView({ roomId } = {}) {
     if (!view) return undefined;
     let disposed = false;
     let poll = null;
+    let readPromise = null;
+    let pollingStarted = false;
     let cssKey = null;
 
     const execute = (code, userGesture = false) => {
@@ -420,10 +428,30 @@ export default function WatchPartyView({ roomId } = {}) {
       };
     })()`);
 
+    // В гостевую страницу одновременно уходит только один запрос состояния.
+    // Если YouTube подвис, следующий тик не добавляет ещё один вызов в очередь:
+    // иначе при долгой загрузке очередь executeJavaScript растёт быстрее, чем
+    // страница успевает отвечать, и подвешивает рендерер вместе с сокетом.
+    const readOnce = () => {
+      if (readPromise) return readPromise;
+      const pending = read();
+      readPromise = pending;
+      const clear = () => {
+        if (readPromise === pending) readPromise = null;
+      };
+      pending.then(clear, clear);
+      return pending;
+    };
+
     const tick = async () => {
       if (disposed || isWebPage) return;
-      const data = await read();
-      if (!data || disposed) return;
+      const data = await readOnce();
+      if (disposed) return;
+      if (!data) {
+        // Страница ещё не готова или не ответила — не частим с опросом.
+        poll = setTimeout(tick, 2000);
+        return;
+      }
       if (data.ad) {
         if (!webviewAdRef.current) {
           webviewAdRef.current = true;
@@ -431,6 +459,7 @@ export default function WatchPartyView({ roomId } = {}) {
           // Пока у хоста реклама, зрители ждут на паузе.
           reportBuffering(true);
         }
+        poll = setTimeout(tick, 1000);
         return;
       }
       if (webviewAdRef.current) {
@@ -462,6 +491,7 @@ export default function WatchPartyView({ roomId } = {}) {
       if (bufferingEnded && !data.paused && snapshotRef.current.self?.host) {
         watchManager.tick(data.currentTime);
       }
+      if (!disposed) poll = setTimeout(tick, 700);
     };
 
     const start = () => {
@@ -469,9 +499,9 @@ export default function WatchPartyView({ roomId } = {}) {
       try {
         if (typeof view.getURL === 'function' && view.getURL()) setWebviewPageReady(true);
       } catch {}
-      if (!poll) {
+      if (!pollingStarted && !disposed) {
+        pollingStarted = true;
         tick();
-        poll = setInterval(tick, 500);
       }
     };
 
@@ -494,12 +524,19 @@ export default function WatchPartyView({ roomId } = {}) {
 
     return () => {
       disposed = true;
+      pollingStarted = false;
       clearTimeout(fallbackTimer);
-      if (poll) clearInterval(poll);
+      if (poll) clearTimeout(poll);
+      poll = null;
       view.removeEventListener('dom-ready', onReady);
       view.removeEventListener('did-attach', start);
       view.removeEventListener('did-finish-load', onReady);
       view.removeEventListener('did-fail-load', onFail);
+      // Обрываем загрузку страницы и видео, иначе удалённый webview
+      // продолжает качать данные и может подтормозить возврат в чат.
+      try {
+        if (typeof view.stop === 'function') view.stop();
+      } catch {}
       if (cssKey) {
         try {
           if (typeof view.removeInsertedCSS === 'function') view.removeInsertedCSS(cssKey);
@@ -781,7 +818,11 @@ export default function WatchPartyView({ roomId } = {}) {
   };
 
   const leave = () => {
+    try {
+      webviewRef.current?.stop?.();
+    } catch {}
     watchManager.leave();
+    ensureSocketAlive();
     closeModal();
   };
 

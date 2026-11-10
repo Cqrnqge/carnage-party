@@ -9,8 +9,51 @@ let audioContext = null;
 // Канал, в котором пользователь был до обрыва связи. После переподключения
 // возвращаем его туда автоматически, чтобы не приходилось заходить вручную.
 let voiceResume = null;
+let reconnectTimer = null;
+let watchdogTimer = null;
+let recoveryListenersBound = false;
 
 const lastNotify = new Map();
+
+function clearReconnectTimer() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
+// Socket.IO сам переподключается только после сетевых обрывов. Если сервер
+// закрыл namespace (io server disconnect), socket.active становится false и
+// клиент остаётся с баннером «Нет соединения» до перезапуска приложения.
+// Возвращаем сокет в строй вручную.
+export function ensureSocketAlive() {
+  if (!socket) return;
+  if (socket.connected) return;
+  try {
+    socket.connect();
+  } catch {}
+}
+
+function armWatchdog() {
+  if (watchdogTimer) return;
+  watchdogTimer = setInterval(() => {
+    if (!socket || socket.connected) return;
+    if (socket.active === false) ensureSocketAlive();
+  }, 4000);
+}
+
+function bindRecoveryListeners() {
+  if (recoveryListenersBound || typeof window === 'undefined') return;
+  recoveryListenersBound = true;
+  const wake = () => {
+    if (socket && !socket.connected) ensureSocketAlive();
+  };
+  window.addEventListener('online', wake);
+  window.addEventListener('focus', wake);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) wake();
+  });
+}
 
 function playPing() {
   const state = useApp.getState();
@@ -103,6 +146,8 @@ function handleFriendsUpdate(friends) {
 }
 
 export function connectSocket(token) {
+  clearReconnectTimer();
+  bindRecoveryListeners();
   if (socket) {
     socket.disconnect();
     socket = null;
@@ -116,8 +161,10 @@ export function connectSocket(token) {
     reconnectionDelay: 700,
     reconnectionDelayMax: 4000,
   });
+  armWatchdog();
 
   socket.on('connect', async () => {
+    clearReconnectTimer();
     useApp.getState().setSocketConnected(true);
     requestNotificationPermission();
     if (hasConnected) {
@@ -145,6 +192,17 @@ export function connectSocket(token) {
     }
     console.warn('[socket] disconnect:', reason);
     voiceManager.handleDisconnect(reason);
+    // Сервер закрыл namespace — автоматического переподключения не будет.
+    if (reason === 'io server disconnect' && !reconnectTimer) {
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (socket && !socket.connected) {
+          try {
+            socket.connect();
+          } catch {}
+        }
+      }, 2000);
+    }
   });
 
   socket.on('connect_error', (err) => {
@@ -291,6 +349,11 @@ export function connectSocket(token) {
 }
 
 export function disconnectSocket() {
+  clearReconnectTimer();
+  if (watchdogTimer) {
+    clearInterval(watchdogTimer);
+    watchdogTimer = null;
+  }
   if (!socket) return;
   voiceResume = null;
   voiceManager.detachSocket();
