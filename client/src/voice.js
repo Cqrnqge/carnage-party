@@ -114,14 +114,17 @@ class VoiceManager {
     this.socket = null;
   }
 
-  handleDisconnect = () => {
+  handleDisconnect = (reason = '') => {
     if (!this.joined) return;
+    console.warn('[voice] соединение потеряно:', reason || 'unknown');
     playSound('leave');
     this.cleanupLocal();
     this.joined = false;
     this.channelId = null;
     useApp.getState().resetVoice();
-    useApp.getState().toast('Соединение потеряно — голосовой чат отключён', 'error');
+    useApp
+      .getState()
+      .toast('Соединение потеряно — возвращаемся в голосовой канал автоматически', 'error');
   };
 
   handleVoiceState = ({ channelId, participants }) => {

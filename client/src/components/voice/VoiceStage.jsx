@@ -289,6 +289,16 @@ export default function VoiceStage() {
   const hasScreen = participants.some((participant) => participant.screen);
   const columns =
     participants.length <= 1 ? 1 : participants.length <= 4 ? 2 : participants.length <= 9 ? 3 : 4;
+  // Экран занимает всю ширину сетки и заменяет плитку своего владельца.
+  // Если после этого в последнем ряду остаётся пустая ячейка, показываем
+  // в ней аватар того, кто демонстрирует экран, вместо пустого места.
+  const selfParticipant = participants.find((participant) => participant.isSelf);
+  const emptyScreenSlots = selfParticipant?.screen
+    ? (columns - ((participants.length - 1) % columns)) % columns
+    : 0;
+  const showSelfAvatar = Boolean(
+    selfParticipant?.screen && participants.length > 1 && emptyScreenSlots > 0
+  );
 
   const content = (
     <div className={cx('voice-stage', 'voice-stage-inline', fullscreen && 'voice-stage-fullscreen')}>
@@ -343,6 +353,16 @@ export default function VoiceStage() {
             />
           );
         })}
+        {showSelfAvatar ? (
+          <ParticipantTile
+            key={`${selfParticipant.userId}:self-avatar`}
+            participant={selfParticipant}
+            stream={null}
+            isSelf
+            localStream={null}
+            compact={participants.length > 4}
+          />
+        ) : null}
         {!voice.connecting && participants.length === 0 ? (
           <div className="voice-empty">
             <Volume2 size={36} />

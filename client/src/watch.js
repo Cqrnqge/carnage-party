@@ -208,6 +208,10 @@ class WatchManager {
     this.socket?.emit('watch:tick', { position });
   }
 
+  requestSync() {
+    this.socket?.emit('watch:sync-request');
+  }
+
   sendChat(text) {
     const value = String(text || '').trim();
     if (value) this.socket?.emit('watch:chat', { text: value });

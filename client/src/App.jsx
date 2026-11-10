@@ -121,9 +121,7 @@ export default function App() {
       }
     };
     window.addEventListener('carnage:unauthorized', unauthorized);
-    window.addEventListener('carnage:unauthorized', unauthorized);
     return () => {
-      window.removeEventListener('carnage:unauthorized', unauthorized);
       window.removeEventListener('carnage:unauthorized', unauthorized);
     };
   }, []);

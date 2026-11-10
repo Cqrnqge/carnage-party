@@ -98,7 +98,10 @@ function startServer(options = {}) {
   const io = new Server(httpServer, {
     cors: { origin: true, credentials: true },
     maxHttpBufferSize: 2 * 1024 * 1024,
-    pingTimeout: 30000,
+    // На мобильных сетях и при кратковременных подвисаниях сервера
+    // стандартных 20 секунд не хватает — клиент успевает вылететь.
+    pingInterval: 25000,
+    pingTimeout: 60000,
   });
 
   app.disable('x-powered-by');
@@ -2734,7 +2737,10 @@ function startServer(options = {}) {
   io.use((socket, next) => {
     const payload = verifyToken(socket.handshake.auth?.token || '');
     const user = payload ? db.user(payload.sub) : null;
-    if (!user) return next(new Error('unauthorized'));
+    if (!user) {
+      console.warn('[socket] unauthorized:', socket.handshake.address || 'unknown');
+      return next(new Error('unauthorized'));
+    }
     socket.data.userId = user.id;
     next();
   });
@@ -2742,6 +2748,10 @@ function startServer(options = {}) {
   io.on('connection', (socket) => {
     const userId = socket.data.userId;
     const user = db.user(userId);
+    console.log(`[socket] connect ${user?.username || userId}`);
+    socket.on('disconnect', (reason) => {
+      console.log(`[socket] disconnect ${user?.username || userId}: ${reason}`);
+    });
     if (!user) return socket.disconnect(true);
 
     socket.join(userRoom(userId));
@@ -3272,6 +3282,15 @@ function startServer(options = {}) {
       room.state.updatedAt = Date.now();
       room.state.revision += 1;
       watchIo.to(watchRoomName(room.id)).emit('watch:sync', {
+        state: room.state,
+        serverNow: Date.now(),
+      });
+    });
+
+    // Любой участник может попросить актуальное состояние, если его плеер
+    // отстал или пропустил обновление после переподключения.
+    socket.on('watch:sync-request', () => {
+      socket.emit('watch:sync', {
         state: room.state,
         serverNow: Date.now(),
       });

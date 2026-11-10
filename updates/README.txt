@@ -13,9 +13,9 @@ GET /api/version, перезапускать его не нужно.
 
 Пример:
 
-  Carnage-Party-Setup-1.1.6.exe
-  Carnage-Party-Portable-1.1.6.zip
-  Carnage-Party-Mobile-1.1.6.apk
+  Carnage-Party-Setup-1.2.2.exe
+  Carnage-Party-Portable-1.2.2.zip
+  Carnage-Party-Mobile-1.2.2.apk
 
 Версия — три числа через точку. Для каждой платформы сервер сам выбирает
 файл с наибольшей версией.
@@ -26,7 +26,7 @@ GET /api/version, перезапускать его не нужно.
 Changelog по версиям — файл changelog.json:
 
   {
-    "1.1.6": [
+    "1.2.2": [
       "Новый логотип и иконки с прозрачным фоном",
       "Исправлено мигание индикатора речи"
     ]

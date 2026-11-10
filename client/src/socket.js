@@ -6,6 +6,9 @@ import { voiceManager } from './voice';
 let socket = null;
 let hasConnected = false;
 let audioContext = null;
+// Канал, в котором пользователь был до обрыва связи. После переподключения
+// возвращаем его туда автоматически, чтобы не приходилось заходить вручную.
+let voiceResume = null;
 
 const lastNotify = new Map();
 
@@ -124,15 +127,29 @@ export function connectSocket(token) {
       } catch {}
     }
     hasConnected = true;
+    const resume = voiceResume;
+    voiceResume = null;
+    if (resume?.channelId) {
+      // Небольшая пауза, чтобы сервер успел обработать новый сокет.
+      setTimeout(() => {
+        void voiceManager.reconnect(resume.channelId);
+      }, 300);
+    }
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', (reason) => {
     useApp.getState().setSocketConnected(false);
-    voiceManager.handleDisconnect();
+    const voice = useApp.getState().voice;
+    if (voice.joined && voice.channelId) {
+      voiceResume = { channelId: voice.channelId };
+    }
+    console.warn('[socket] disconnect:', reason);
+    voiceManager.handleDisconnect(reason);
   });
 
   socket.on('connect_error', (err) => {
     useApp.getState().setSocketConnected(false);
+    console.warn('[socket] connect_error:', err?.message || err);
     if (String(err?.message || '').includes('unauthorized')) {
       try { window.dispatchEvent(new CustomEvent('carnage:unauthorized')); } catch {}
     }
@@ -275,6 +292,7 @@ export function connectSocket(token) {
 
 export function disconnectSocket() {
   if (!socket) return;
+  voiceResume = null;
   voiceManager.detachSocket();
   socket.disconnect();
   socket = null;

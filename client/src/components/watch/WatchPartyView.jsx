@@ -611,9 +611,29 @@ export default function WatchPartyView({ roomId } = {}) {
       if (!snapshotRef.current.state?.playing) return;
       const value = getCurrentTime();
       if (Number.isFinite(value)) watchManager.tick(value);
-    }, 5000);
+    }, 2000);
     return () => clearInterval(tick);
   }, [isHost, playerReady, room?.id, isWebPage]);
+
+  // Остальные участники периодически запрашивают актуальное состояние:
+  // так плеер догоняет после потери пакетов, сворачивания окна или
+  // переподключения, даже если очередной тик хоста не дошёл.
+  useEffect(() => {
+    if (isHost || !playerReady || !room?.id) return undefined;
+    const request = () => watchManager.requestSync();
+    request();
+    const id = setInterval(request, 4000);
+    const onVisible = () => {
+      if (!document.hidden) request();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [isHost, playerReady, room?.id]);
 
   useEffect(() => {
     if (chatEndRef.current) chatEndRef.current.scrollIntoView({ block: 'end' });
