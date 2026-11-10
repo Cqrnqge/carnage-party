@@ -81,10 +81,15 @@ class RtmpManager {
     this.stream = null;
     this.targets = defaultRtmpTargets();
     this.secure = false;
-    this.status = { phase: 'idle', destinations: [], error: '', log: [] };
+    this.status = { phase: 'idle', destinations: [], error: '', warning: '', log: [] };
     this.listeners = new Set();
     this.statusBound = false;
     this.saving = false;
+    // Чанки MediaRecorder обязаны уходить в ffmpeg строго по порядку:
+    // Blob.arrayBuffer() асинхронный, и параллельные вызовы могут
+    // переставить куски WebM — тогда эфир «дёргается» и зацикливается.
+    this.chunkQueue = Promise.resolve();
+    this.lastWarningAt = 0;
   }
 
   get supported() {
@@ -128,11 +133,16 @@ class RtmpManager {
         phase: payload.phase || 'idle',
         destinations: Array.isArray(payload.destinations) ? payload.destinations : [],
         error: payload.error || '',
+        warning: payload.warning || '',
+        warningAt: Number(payload.warningAt) || 0,
         log: Array.isArray(payload.log) ? payload.log : [],
         startedAt: payload.startedAt || null,
       };
       if (this.status.phase === 'error' && this.status.error) {
         useApp.getState().toast(`Мультистрим: ${this.status.error.split('\n')[0]}`, 'error');
+      } else if (this.status.warning && this.status.warningAt !== this.lastWarningAt) {
+        this.lastWarningAt = this.status.warningAt;
+        useApp.getState().toast(`Мультистрим: ${this.status.warning}`, 'info');
       }
       this.notify();
     });
@@ -153,9 +163,12 @@ class RtmpManager {
           phase: status.phase,
           destinations: Array.isArray(status.destinations) ? status.destinations : [],
           error: status.error || '',
+          warning: status.warning || '',
+          warningAt: Number(status.warningAt) || 0,
           log: Array.isArray(status.log) ? status.log : [],
           startedAt: status.startedAt || null,
         };
+        this.lastWarningAt = this.status.warningAt;
       }
     } catch {}
     this.notify();
@@ -220,12 +233,20 @@ class RtmpManager {
       throw new Error(err?.message || 'MediaRecorder не поддерживает запись потока');
     }
 
-    recorder.ondataavailable = async (event) => {
-      if (!event.data || !event.data.size) return;
-      try {
-        const buffer = await event.data.arrayBuffer();
-        window.desktop.rtmp.chunk(buffer);
-      } catch {}
+    const session = { closed: false };
+    this.chunkSession = session;
+    this.chunkQueue = Promise.resolve();
+    recorder.ondataavailable = (event) => {
+      const blob = event.data;
+      if (!blob || !blob.size) return;
+      this.chunkQueue = this.chunkQueue
+        .then(async () => {
+          if (session.closed) return;
+          const buffer = await blob.arrayBuffer();
+          if (session.closed) return;
+          window.desktop.rtmp.chunk(buffer);
+        })
+        .catch(() => {});
     };
     recorder.onerror = (event) => {
       const message = event?.error?.message || 'Ошибка записи RTMP-потока';
@@ -239,7 +260,9 @@ class RtmpManager {
     };
 
     try {
-      recorder.start(1000);
+      // 250 мс вместо 1 с: ffmpeg получает данные ровнее и не отправляет
+      // на площадки секундные «пачки», из-за которых инжест отстаёт.
+      recorder.start(250);
     } catch (err) {
       await window.desktop.rtmp.stop();
       throw new Error(err?.message || 'Не удалось запустить запись RTMP');
@@ -252,8 +275,10 @@ class RtmpManager {
 
   async stop({ silent = false } = {}) {
     const recorder = this.recorder;
+    const session = this.chunkSession;
     this.recorder = null;
     this.stream = null;
+    this.chunkSession = null;
     if (recorder) {
       await new Promise((resolve) => {
         let done = false;
@@ -272,6 +297,13 @@ class RtmpManager {
         setTimeout(finish, 1200);
       });
     }
+    // Дочищаем очередь: последний dataavailable приходит после stop(),
+    // и без этого хвост звука терялся при завершении эфира.
+    await Promise.race([
+      this.chunkQueue,
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]).catch(() => {});
+    if (session) session.closed = true;
     if (this.supported) {
       try {
         await window.desktop.rtmp.stop();

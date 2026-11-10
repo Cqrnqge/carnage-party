@@ -2473,6 +2473,48 @@
   color: #d8a6ff;
 }
 
+.stream-audio-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-2);
+  color: var(--text-2);
+  text-align: left;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.stream-audio-row:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-3);
+}
+
+.stream-audio-row:disabled {
+  opacity: 0.6;
+}
+
+.stream-audio-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.stream-audio-text strong {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.stream-audio-text small {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
 .stream-monitor-block {
   margin-top: 2px;
 }

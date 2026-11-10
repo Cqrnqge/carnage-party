@@ -99,7 +99,7 @@ async function resolveScreenSource(preselectedId) {
   return sourceId;
 }
 
-async function requestDisplay(sourceId) {
+async function requestDisplay(sourceId, { systemAudio = true } = {}) {
   const select = async () => {
     if (!sourceId || !window.desktop?.selectScreenSource) return;
     try {
@@ -111,6 +111,11 @@ async function requestDisplay(sourceId) {
     // Захватываем выбранный источник в родном разрешении: окно или монитор.
     frameRate: { ideal: 60, max: 60 },
   };
+  // Системный звук можно отключить: если стример слушает свой эфир на этом
+  // же ПК, петля обратной связи превращает звук в бесконечное эхо.
+  if (!systemAudio) {
+    return navigator.mediaDevices.getDisplayMedia({ video, audio: false });
+  }
   try {
     return await navigator.mediaDevices.getDisplayMedia({ video, audio: true });
   } catch (err) {
@@ -121,9 +126,9 @@ async function requestDisplay(sourceId) {
   }
 }
 
-async function captureScreen(preselectedId) {
+async function captureScreen(preselectedId, { systemAudio = true } = {}) {
   const sourceId = await resolveScreenSource(preselectedId);
-  const stream = await requestDisplay(sourceId);
+  const stream = await requestDisplay(sourceId, { systemAudio });
   let captureInfo = null;
   try {
     captureInfo = await window.desktop?.getScreenCaptureInfo?.();
@@ -310,6 +315,7 @@ class StreamBroadcaster {
     mode = 'app',
     source = 'camera',
     screenSourceId = '',
+    systemAudio = true,
     channelId = null,
   } = {}) {
     if (this.stream) await this.stop({ silent: true });
@@ -331,7 +337,7 @@ class StreamBroadcaster {
       // Захват экрана запрашиваем первым: браузеру нужен активный жест
       // пользователя, а диалог камеры может «съесть» этот жест.
       if (needsScreen) {
-        const captured = await captureScreen(screenSourceId);
+        const captured = await captureScreen(screenSourceId, { systemAudio });
         screenMedia = captured.stream;
         screenCaptureInfo = captured.info;
         if (!screenMedia.getVideoTracks().length) {

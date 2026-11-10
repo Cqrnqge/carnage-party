@@ -63,6 +63,13 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
   const [rtmp, setRtmp] = useState(() => rtmpManager.snapshot());
   const [rtmpError, setRtmpError] = useState('');
   const [showKeys, setShowKeys] = useState({});
+  const [systemAudio, setSystemAudio] = useState(() => {
+    try {
+      return localStorage.getItem('carnage_stream_system_audio') !== '0';
+    } catch {
+      return true;
+    }
+  });
   const previewRef = useRef(null);
 
   const canScreen = typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getDisplayMedia);
@@ -124,6 +131,17 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
       const next = { ...prev, [key]: !prev[key] };
       // Хотя бы один источник должен остаться выбранным.
       if (!next.camera && !next.screen) return prev;
+      return next;
+    });
+  };
+
+  const toggleSystemAudio = () => {
+    if (busy) return;
+    setSystemAudio((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('carnage_stream_system_audio', next ? '1' : '0');
+      } catch {}
       return next;
     });
   };
@@ -197,6 +215,9 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
         mode,
         source: selectedSource,
         screenSourceId: wants.screen ? screenId || screens[0]?.id || '' : '',
+        // Звук системы нужен только вместе с экраном. Его отключение
+        // гарантирует, что эфир не «подхватит» сам себя с этого же ПК.
+        systemAudio: wants.screen ? systemAudio : false,
         channelId: channelId || null,
       });
       setResult(stream);
@@ -543,6 +564,26 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
                 <span>После нажатия «Начать трансляцию» выберите экран или окно в системном окне.</span>
               </div>
             )
+          ) : null}
+
+          {wants.screen ? (
+            <button
+              type="button"
+              className="stream-audio-row"
+              onClick={toggleSystemAudio}
+              disabled={busy}
+              aria-pressed={systemAudio}
+            >
+              <span className="stream-audio-text">
+                <strong>Звук системы</strong>
+                <small>
+                  {systemAudio
+                    ? 'Игры и приложения. Не слушайте свой эфир на этом же ПК: звук попадёт в захват и зациклится.'
+                    : 'Только микрофон — эхо и петля из системного звука исключены.'}
+                </small>
+              </span>
+              <span className={cx('toggle', systemAudio && 'on')}><span /></span>
+            </button>
           ) : null}
 
           {rtmpSupported ? (

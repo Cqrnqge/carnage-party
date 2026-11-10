@@ -31,6 +31,18 @@ const PLATFORM_LABELS = {
 const VIDEO_KBPS = 3500;
 const AUDIO_KBPS = 160;
 
+// Каждая площадка получает собственный поток fifo: медленный или зависший
+// приёмник больше не тормозит остальные и не превращает эфир в «петлю».
+// Очередь ~8 секунд, дальше пакеты отбрасываются, чтобы не копить задержку.
+const TEE_FIFO_OPTIONS = [
+  'queue_size=600',
+  'drop_pkts_on_overflow=1',
+  'attempt_recovery=1',
+  'recovery_wait_time=1',
+  'max_recovery_attempts=0',
+  'restart_with_keyframe=1',
+].join(':');
+
 function resolveFfmpegPath() {
   try {
     const bundled = require('ffmpeg-static');
@@ -143,9 +155,13 @@ function registerRtmp({ ipcMain, app, safeStorage, broadcast }) {
     phase: 'idle',
     destinations: [],
     error: '',
+    warning: '',
+    warningAt: 0,
     startedAt: null,
     log: [],
   };
+  // Не спамим одинаковыми предупреждениями, если площадка «моргает».
+  let lastWarningAt = 0;
 
   const ffmpegPath = resolveFfmpegPath();
 
@@ -201,7 +217,15 @@ function registerRtmp({ ipcMain, app, safeStorage, broadcast }) {
         } catch {}
       }, 3000).unref?.();
     }
-    emitStatus({ phase: 'idle', destinations: [], error: '', startedAt: null, log: [] });
+    emitStatus({
+      phase: 'idle',
+      destinations: [],
+      error: '',
+      warning: '',
+      warningAt: 0,
+      startedAt: null,
+      log: [],
+    });
     return true;
   };
 
@@ -231,6 +255,9 @@ function registerRtmp({ ipcMain, app, safeStorage, broadcast }) {
       '-loglevel', 'warning',
       '-fflags', '+genpts',
       '-i', 'pipe:0',
+      // Живой WebM приходит чанками — фиксируем CFR, чтобы FLV/RTMP
+      // не получал рваные таймстампы на стыках чанков.
+      '-fps_mode', 'cfr',
       '-map', '0:v:0',
       '-map', '0:a:0?',
       '-c:v', 'libx264',
@@ -250,6 +277,9 @@ function registerRtmp({ ipcMain, app, safeStorage, broadcast }) {
       '-b:a', `${AUDIO_KBPS}k`,
       '-ar', '48000',
       '-ac', '2',
+      // Отдельный поток и буфер на каждую площадку + авто-переподключение.
+      '-use_fifo', '1',
+      '-fifo_options', TEE_FIFO_OPTIONS,
       '-f', 'tee',
       teeSpec,
     ];
@@ -274,6 +304,23 @@ function registerRtmp({ ipcMain, app, safeStorage, broadcast }) {
       for (const line of String(chunk).split(/\r?\n/)) {
         if (!line.trim()) continue;
         pushLog(line);
+        // Площадка отвалилась, но tee/fifo её переподключает. Сообщаем
+        // пользователю, чтобы «тихий» обрыв не выглядел как зависший эфир.
+        if (
+          !stopping &&
+          /(Slave muxer #\d+ failed|Error writing trailer|Connection (refused|reset)|Broken pipe|Operation timed out|Error opening output)/i.test(
+            line
+          )
+        ) {
+          const now = Date.now();
+          if (now - lastWarningAt > 20000) {
+            lastWarningAt = now;
+            emitStatus({
+              warning: 'Площадка отключилась — ffmpeg переподключается автоматически',
+              warningAt: now,
+            });
+          }
+        }
       }
     });
     child.stdin?.on('error', () => {});
@@ -300,10 +347,13 @@ function registerRtmp({ ipcMain, app, safeStorage, broadcast }) {
       emitStatus({ phase: 'error', error, log: logLines.slice(-12) });
     });
 
+    lastWarningAt = 0;
     emitStatus({
       phase: 'starting',
       destinations: list.map((item) => ({ platform: item.platform, label: item.label })),
       error: '',
+      warning: '',
+      warningAt: 0,
       startedAt: Date.now(),
       log: [],
     });
