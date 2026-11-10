@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   AppWindow,
   Camera,
   Check,
@@ -65,9 +66,11 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
   const [showKeys, setShowKeys] = useState({});
   const [systemAudio, setSystemAudio] = useState(() => {
     try {
-      return localStorage.getItem('carnage_stream_system_audio') !== '0';
+      // По умолчанию захватываем только микрофон. Звук системы включается
+      // осознанно: иначе открытый на этом же ПК эфир зацикливается.
+      return localStorage.getItem('carnage_stream_system_audio') === '1';
     } catch {
-      return true;
+      return false;
     }
   });
   const previewRef = useRef(null);
@@ -137,6 +140,12 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
 
   const toggleSystemAudio = () => {
     if (busy) return;
+    if (!systemAudio) {
+      const ok = window.confirm(
+        'Звук системы попадёт в эфир. Если открыть свой стрим на этом же ПК, его звук снова попадёт в захват и зациклится.\n\nВключить звук системы?'
+      );
+      if (!ok) return;
+    }
     setSystemAudio((prev) => {
       const next = !prev;
       try {
@@ -578,12 +587,22 @@ export default function StartStreamModal({ channelId = null, channelName = '' } 
                 <strong>Звук системы</strong>
                 <small>
                   {systemAudio
-                    ? 'Игры и приложения. Не слушайте свой эфир на этом же ПК: звук попадёт в захват и зациклится.'
-                    : 'Только микрофон — эхо и петля из системного звука исключены.'}
+                    ? 'Звук игры и приложений. Не открывайте свой эфир на этом ПК: звук зациклится.'
+                    : 'Только микрофон. Включите, если нужен звук игры, но не слушайте свой эфир на этом ПК.'}
                 </small>
               </span>
               <span className={cx('toggle', systemAudio && 'on')}><span /></span>
             </button>
+          ) : null}
+
+          {wants.screen && systemAudio ? (
+            <div className="stream-audio-warning">
+              <AlertTriangle size={15} />
+              <span>
+                Захват звука системы вернёт в эфир всё, что играет на этом ПК, включая
+                открытую трансляцию. Смотрите свой стрим с телефона или другого устройства.
+              </span>
+            </div>
           ) : null}
 
           {rtmpSupported ? (
