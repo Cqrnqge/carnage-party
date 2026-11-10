@@ -8,6 +8,7 @@ import {
   Loader2,
   Maximize2,
   MessageSquare,
+  Mic,
   Minimize2,
   Pause,
   Play,
@@ -23,7 +24,8 @@ import {
   X,
 } from 'lucide-react';
 import { useApp } from '../../store';
-import { formatTime } from '../../utils';
+import { cx, formatTime, keyLabel } from '../../utils';
+import { voiceManager } from '../../voice';
 import { copyText } from '../../stream-utils';
 import Avatar from '../ui/Avatar';
 import EmojiPicker from '../chat/EmojiPicker';
@@ -105,7 +107,6 @@ export default function WatchPartyView({ roomId } = {}) {
   const [fullscreen, setFullscreen] = useState(false);
   const [chatText, setChatText] = useState('');
   const [showChat, setShowChat] = useState(true);
-  const [webviewFallback, setWebviewFallback] = useState(false);
   const [webviewPageReady, setWebviewPageReady] = useState(false);
   const [webviewAd, setWebviewAd] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -131,13 +132,23 @@ export default function WatchPartyView({ roomId } = {}) {
   const chatInputRef = useRef(null);
   const volumeRef = useRef(volume);
   const mutedRef = useRef(muted);
+  const localBufferingRef = useRef(false);
+  const hostBufferingRef = useRef(false);
+  const seekValueRef = useRef(null);
+  const lastSeekRef = useRef({ at: 0, target: 0 });
+  const syncedOnceRef = useRef(false);
 
   const servers = useApp((app) => app.servers);
   const channels = useApp((app) => app.channels);
+  const pushToTalk = useApp((app) => app.settings.pushToTalk);
+  const pttKey = useApp((app) => app.settings.pttKey);
+  const voiceJoined = useApp((app) => app.voice.joined);
+  const pttActive = useApp((app) => app.voice.ptt);
 
   snapshotRef.current = snapshot;
   volumeRef.current = volume;
   mutedRef.current = muted;
+  seekValueRef.current = seekValue;
   const { room, state, participants, chat, self, live, ended, error, offset } = snapshot;
   const isHost = Boolean(self?.host);
 
@@ -146,7 +157,9 @@ export default function WatchPartyView({ roomId } = {}) {
   const isDirectVideo =
     isVkVideo || (room?.source?.type === 'url' && isDirectVideoUrl(room.source.url));
   const isWebPage = room?.source?.type === 'url' && !isDirectVideo;
-  const useYouTubeWebview = room?.source?.type === 'youtube' && webviewFallback && canWebview;
+  // На десктопе YouTube играет во встроенном браузере: только там видно
+  // рекламу, можно дождаться её окончания и точно сверить позицию.
+  const useYouTubeWebview = room?.source?.type === 'youtube' && canWebview;
   const useWebview = useYouTubeWebview || (isWebPage && canWebview);
   const webviewSrc = useYouTubeWebview
     ? `https://www.youtube.com/watch?v=${room.source.videoId}&autoplay=0&playsinline=1`
@@ -159,6 +172,20 @@ export default function WatchPartyView({ roomId } = {}) {
     : undefined;
   const roomChannel = (channels || []).find((item) => item.id === room?.channelId);
   const roomServer = (servers || []).find((item) => item.id === roomChannel?.serverId);
+  // Хост буферизует или перематывает: зрители ждут, а не убегают вперёд.
+  const hostBuffering = Boolean(
+    !isHost &&
+      live &&
+      participants.some((item) => item.userId === room?.hostId && item.buffering)
+  );
+  hostBufferingRef.current = hostBuffering;
+
+  const reportBuffering = (value) => {
+    const next = Boolean(value);
+    if (localBufferingRef.current === next) return;
+    localBufferingRef.current = next;
+    watchManager.setBuffering(next);
+  };
 
   useEffect(() => {
     const unsubscribe = watchManager.subscribe(setSnapshot);
@@ -178,7 +205,6 @@ export default function WatchPartyView({ roomId } = {}) {
     setCurrentTime(0);
     setDuration(0);
     setSeekValue(null);
-    setWebviewFallback(false);
     setWebviewPageReady(false);
     setWebviewAd(false);
     setEmojiOpen(false);
@@ -186,13 +212,16 @@ export default function WatchPartyView({ roomId } = {}) {
     setSourceError('');
     webviewStateRef.current = { currentTime: 0, duration: 0, paused: true, ad: false };
     webviewAdRef.current = false;
+    localBufferingRef.current = false;
+    lastSeekRef.current = { at: 0, target: 0 };
+    syncedOnceRef.current = false;
     playerKindRef.current = room?.source?.type || '';
+    watchManager.setBuffering(false);
   }, [room?.id, room?.source?.type, room?.source?.videoId, room?.source?.url]);
 
-  // YouTube-плеер.
+  // YouTube-плеер (веб-версия; на десктопе используется webview).
   useEffect(() => {
-    if (room?.source?.type !== 'youtube' || !room?.source?.videoId) return undefined;
-    if (webviewFallback) return undefined;
+    if (room?.source?.type !== 'youtube' || !room?.source?.videoId || canWebview) return undefined;
     let cancelled = false;
     const media = mediaRef.current;
     if (!media) return undefined;
@@ -231,26 +260,28 @@ export default function WatchPartyView({ roomId } = {}) {
               if (value === 1) {
                 setPlaying(true);
                 setNeedsGesture(false);
-                watchManager.setBuffering(false);
+                reportBuffering(false);
+                if (snapshotRef.current.self?.host) {
+                  try {
+                    const position = event.target.getCurrentTime?.();
+                    if (Number.isFinite(position)) watchManager.tick(position);
+                  } catch {}
+                }
               } else if (value === 2) {
                 setPlaying(false);
+                reportBuffering(false);
               } else if (value === 3) {
-                watchManager.setBuffering(true);
+                reportBuffering(true);
               } else if (value === 0) {
                 setPlaying(false);
+                reportBuffering(false);
               }
             },
             onError: (event) => {
               const code = Number(event.data);
-              if ((code === 101 || code === 150) && canWebview) {
-                setPlayerError('');
-                setPlayerReady(false);
-                setWebviewFallback(true);
-                return;
-              }
               setPlayerError(
                 code === 101 || code === 150
-                  ? 'YouTube запрещает встраивание этого видео. Откройте его в приложении Carnage Party — там работает встроенный браузер — или на YouTube.'
+                  ? 'YouTube запрещает встраивание этого видео. Откройте его на YouTube.'
                   : 'YouTube не смог воспроизвести видео. Попробуйте другую ссылку.'
               );
             },
@@ -270,7 +301,7 @@ export default function WatchPartyView({ roomId } = {}) {
       playerRef.current = null;
       host.remove();
     };
-  }, [room?.source?.type, room?.source?.videoId, webviewFallback, canWebview]);
+  }, [room?.source?.type, room?.source?.videoId, canWebview]);
 
   useEffect(() => {
     const direct =
@@ -286,15 +317,29 @@ export default function WatchPartyView({ roomId } = {}) {
     const onPlay = () => {
       setPlaying(true);
       setNeedsGesture(false);
-      watchManager.setBuffering(false);
+      reportBuffering(false);
     };
-    const onPause = () => setPlaying(false);
-    const onWaiting = () => watchManager.setBuffering(true);
+    const onPause = () => {
+      setPlaying(false);
+      reportBuffering(false);
+    };
+    const onWaiting = () => reportBuffering(true);
+    const onSeeking = () => reportBuffering(true);
+    const onSeeked = () => {
+      if (video.paused) reportBuffering(false);
+    };
     const onPlaying = () => {
       setPlaying(true);
-      watchManager.setBuffering(false);
+      reportBuffering(false);
+      if (snapshotRef.current.self?.host) {
+        const position = video.currentTime;
+        if (Number.isFinite(position)) watchManager.tick(position);
+      }
     };
-    const onEnded = () => setPlaying(false);
+    const onEnded = () => {
+      setPlaying(false);
+      reportBuffering(false);
+    };
     const onError = () => {
       setPlayerReady(false);
       setPlayerError(
@@ -307,6 +352,8 @@ export default function WatchPartyView({ roomId } = {}) {
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
     video.addEventListener('waiting', onWaiting);
+    video.addEventListener('seeking', onSeeking);
+    video.addEventListener('seeked', onSeeked);
     video.addEventListener('playing', onPlaying);
     video.addEventListener('ended', onEnded);
     video.addEventListener('error', onError);
@@ -315,6 +362,8 @@ export default function WatchPartyView({ roomId } = {}) {
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
       video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('seeking', onSeeking);
+      video.removeEventListener('seeked', onSeeked);
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('ended', onEnded);
       video.removeEventListener('error', onError);
@@ -366,6 +415,7 @@ export default function WatchPartyView({ roomId } = {}) {
         currentTime: Number(video.currentTime) || 0,
         duration: Number(video.duration) || 0,
         paused: Boolean(video.paused),
+        buffering: Boolean(video.seeking) || video.readyState < 3,
         ad,
       };
     })()`);
@@ -375,14 +425,23 @@ export default function WatchPartyView({ roomId } = {}) {
       const data = await read();
       if (!data || disposed) return;
       if (data.ad) {
-        webviewAdRef.current = true;
-        setWebviewAd(true);
+        if (!webviewAdRef.current) {
+          webviewAdRef.current = true;
+          setWebviewAd(true);
+          // Пока у хоста реклама, зрители ждут на паузе.
+          reportBuffering(true);
+        }
         return;
       }
       if (webviewAdRef.current) {
         webviewAdRef.current = false;
         setWebviewAd(false);
+        reportBuffering(false);
         applyStateRef.current?.(snapshotRef.current.state, true);
+        if (snapshotRef.current.self?.host) {
+          const position = webviewStateRef.current.currentTime;
+          if (Number.isFinite(position)) watchManager.tick(position);
+        }
       }
       webviewStateRef.current = {
         currentTime: data.currentTime,
@@ -390,11 +449,19 @@ export default function WatchPartyView({ roomId } = {}) {
         paused: data.paused,
         ad: false,
       };
+      const buffering = Boolean(data.buffering);
+      const bufferingEnded = localBufferingRef.current && !buffering;
+      reportBuffering(buffering);
       setPlayerReady(true);
       if (Number.isFinite(data.duration) && data.duration > 0) setDuration(data.duration);
       setCurrentTime(data.currentTime);
       setPlaying(!data.paused);
       if (!data.paused) setNeedsGesture(false);
+      // Хост закончил буферизацию — сразу сообщаем актуальную позицию,
+      // чтобы зрители не ждали следующего двухсекундного тика.
+      if (bufferingEnded && !data.paused && snapshotRef.current.self?.host) {
+        watchManager.tick(data.currentTime);
+      }
     };
 
     const start = () => {
@@ -566,10 +633,21 @@ export default function WatchPartyView({ roomId } = {}) {
 
   const applyState = (next, force = false) => {
     if (!next || !playerReady || webviewAdRef.current) return;
+    // Хост буферизует/перематывает: не гоним зрителей по устаревшей позиции.
+    if (!isHost && hostBufferingRef.current && live) return;
     const target = watchTarget(next, offset);
     const current = getCurrentTime();
     const drift = Number.isFinite(current) ? current - target : 0;
     const paused = isPaused();
+    const now = Date.now();
+    // Защита от повторных seek: несколько обновлений подряд могут прийти
+    // до того, как плеер успеет сообщить новую позицию.
+    const seekOnce = (position) => {
+      const last = lastSeekRef.current;
+      if (!force && now - last.at < 1500 && Math.abs(last.target - position) < 1.5) return;
+      lastSeekRef.current = { at: now, target: position };
+      seek(position);
+    };
     applyingRef.current = true;
     try {
       if (next.playing) {
@@ -582,12 +660,12 @@ export default function WatchPartyView({ roomId } = {}) {
             if (next.playing && isPaused()) setNeedsGesture(true);
           }, 1800);
         }
-        if (force || Math.abs(drift) > 1.0) seek(target);
+        if (force || Math.abs(drift) > 1.0) seekOnce(target);
         else if (Math.abs(drift) > 0.25) setPlaybackRate((next.rate || 1) * (drift > 0 ? 0.97 : 1.03));
         else setPlaybackRate(next.rate || 1);
       } else {
         if (!paused) pause();
-        if (force || Math.abs(drift) > 0.15) seek(target);
+        if (force || Math.abs(drift) > 0.15) seekOnce(target);
         setPlaybackRate(next.rate || 1);
       }
     } finally {
@@ -603,7 +681,11 @@ export default function WatchPartyView({ roomId } = {}) {
 
   useEffect(() => {
     if (!playerReady || !state) return;
-    applyState(state, false);
+    // Первое применение после загрузки плеера — принудительное: зритель
+    // должен сразу попасть в актуальную позицию хоста, а не с начала.
+    const force = !syncedOnceRef.current;
+    syncedOnceRef.current = true;
+    applyState(state, force);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, playerReady]);
 
@@ -623,12 +705,31 @@ export default function WatchPartyView({ roomId } = {}) {
     if (!isHost || !playerReady || isWebPage) return undefined;
     const tick = setInterval(() => {
       if (webviewAdRef.current) return;
+      // Пока хост буферизует, перематывает или сам применяет состояние,
+      // его позиция ещё не финальная — тик только сбил бы зрителей.
+      if (localBufferingRef.current || applyingRef.current) return;
+      if (seekValueRef.current !== null) return;
       if (!snapshotRef.current.state?.playing) return;
       const value = getCurrentTime();
       if (Number.isFinite(value)) watchManager.tick(value);
     }, 2000);
     return () => clearInterval(tick);
   }, [isHost, playerReady, room?.id, isWebPage]);
+
+  // Зрители ставятся на паузу, пока хост буферизует или перематывает,
+  // и догоняют его, когда воспроизведение вернулось.
+  useEffect(() => {
+    if (isHost || !playerReady || isWebPage || ended) return;
+    if (hostBuffering) {
+      pause();
+      return;
+    }
+    if (snapshotRef.current.state) {
+      watchManager.requestSync();
+      applyStateRef.current?.(snapshotRef.current.state, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hostBuffering, isHost, playerReady, isWebPage, ended]);
 
   // Остальные участники периодически запрашивают актуальное состояние:
   // так плеер догоняет после потери пакетов, сворачивания окна или
@@ -861,6 +962,37 @@ export default function WatchPartyView({ roomId } = {}) {
           >
             <UserPlus size={15} /> <span>Пригласить</span>
           </button>
+          {voiceJoined && pushToTalk ? (
+            <button
+              type="button"
+              className={cx('btn btn-ghost btn-small watch-ptt', pttActive && 'active')}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                try {
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                } catch {}
+                voiceManager.pttStart();
+              }}
+              onPointerUp={() => voiceManager.pttEnd()}
+              onPointerCancel={() => voiceManager.pttEnd()}
+              onLostPointerCapture={() => voiceManager.pttEnd()}
+              onKeyDown={(event) => {
+                if (event.code !== 'Space' && event.code !== 'Enter') return;
+                event.preventDefault();
+                voiceManager.pttStart();
+              }}
+              onKeyUp={(event) => {
+                if (event.code !== 'Space' && event.code !== 'Enter') return;
+                event.preventDefault();
+                voiceManager.pttEnd();
+              }}
+              onContextMenu={(event) => event.preventDefault()}
+              title={`Рация: удерживайте ${keyLabel(pttKey)} или эту кнопку`}
+            >
+              <Mic size={15} /> <span>Рация</span>
+            </button>
+          ) : null}
           <button
             type="button"
             className="icon-btn"

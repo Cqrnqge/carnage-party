@@ -683,6 +683,13 @@ input[type="range"]:focus {
   animation: modalIn 0.19s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+/* Модалка получает фокус при открытии (нужно для режима рации), но
+   визуальная рамка вокруг всего окна не нужна. */
+.modal:focus,
+.modal:focus-visible {
+  outline: none;
+}
+
 @keyframes modalIn {
   from {
     opacity: 0;

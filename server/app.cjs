@@ -35,6 +35,7 @@ const { createPushService } = require('./push.cjs');
 const { parseMusicSource, musicDTO, vkVideoIdFromUrl } = require('./music.cjs');
 const {
   resolveYouTube,
+  searchYouTube,
   resolveRutube,
   resolveVk,
   isAllowedUpstream,
@@ -2578,6 +2579,31 @@ function startServer(options = {}) {
           };
         } catch (error) {
           return fail(res, `Не удалось открыть VK Видео: ${error.message}`);
+        }
+      } else if (source.type === 'vk-audio') {
+        // VK Music без авторизации не отдаёт поиск и mp3. Берём название
+        // трека из ссылки, находим его на YouTube и играем через прокси.
+        try {
+          const found = await searchYouTube(source.query);
+          source.origin = 'vk-audio';
+          source.originUrl = source.url;
+          source.type = 'youtube';
+          source.videoId = found.videoId;
+          source.url = `https://www.youtube.com/watch?v=${found.videoId}`;
+          source.title = found.title || source.title;
+          source.duration = found.duration || 0;
+          try {
+            const resolved = await resolveYouTube(found.videoId);
+            source.title = resolved.title || source.title;
+            source.duration = resolved.duration || source.duration;
+            playback = { streamUrl: resolved.streamUrl, expiresAt: resolved.expiresAt };
+          } catch (error) {
+            // Как и для обычного YouTube, оставляем запасной IFrame-плеер.
+            console.warn('[music] VK Music → YouTube stream:', error.message);
+            source.playbackError = String(error.message || 'YouTube не отдал аудиопоток');
+          }
+        } catch (error) {
+          return fail(res, `Не удалось найти трек VK Music: ${error.message}`, 502);
         }
       }
 

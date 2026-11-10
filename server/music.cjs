@@ -59,6 +59,28 @@ function vkVideoIdFromUrl(value) {
   return '';
 }
 
+function vkAudioQueryFromUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    const host = url.hostname.replace(/^www\./i, '').toLowerCase();
+    const isVkHost =
+      host === 'vk.com' ||
+      host.endsWith('.vk.com') ||
+      host === 'vk.ru' ||
+      host.endsWith('.vk.ru');
+    if (!isVkHost) return '';
+    // Страница поиска VK Music: /audio?performer=1&q=... или /music?q=...
+    if (!/^\/(?:audio|audios|music)(?:\/|$)/i.test(url.pathname)) return '';
+    const query =
+      url.searchParams.get('q') ||
+      url.searchParams.get('query') ||
+      url.searchParams.get('search') ||
+      '';
+    return String(query).replace(/\s+/g, ' ').trim().slice(0, 180);
+  } catch {}
+  return '';
+}
+
 function prettyUrlTitle(url) {
   try {
     const parsed = new URL(url);
@@ -109,6 +131,20 @@ function parseMusicSource(raw) {
       url: `https://vk.com/video${owner}_${video}`,
       videoId: vkId,
       title: providedTitle || 'VK Видео',
+      live: false,
+    };
+  }
+
+  // Ссылка на поиск VK Music: без авторизации VK не отдаёт mp3, поэтому
+  // трек ищется на YouTube, а играется через уже готовый прокси.
+  const vkAudioQuery = vkAudioQueryFromUrl(url);
+  if (vkAudioQuery) {
+    return {
+      type: 'vk-audio',
+      url,
+      videoId: null,
+      query: vkAudioQuery,
+      title: providedTitle || `VK Music: ${vkAudioQuery}`,
       live: false,
     };
   }
@@ -165,6 +201,7 @@ module.exports = {
   youtubeIdFromUrl,
   rutubeIdFromUrl,
   vkVideoIdFromUrl,
+  vkAudioQueryFromUrl,
   parseMusicSource,
   musicDTO,
   prettyUrlTitle,

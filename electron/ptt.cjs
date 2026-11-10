@@ -96,9 +96,10 @@ function setupPtt({ app, ipcMain, getWindow }) {
     const win = getWindow?.();
     if (!win || win.isDestroyed()) return;
     if (state === 'down') {
-      // Когда окно в фокусе, keydown/keyup уже обрабатывает интерфейс.
-      // Глобальный путь нужен только для свёрнутого/неактивного окна.
-      if (!win.isMinimized() && win.isFocused()) return;
+      // Отправляем всегда, даже когда окно в фокусе: keydown из <webview>,
+      // iframe и кинотеатра не доходит до window, поэтому интерфейс не может
+      // определить нажатие самостоятельно. Повторный pttStart() безвреден —
+      // voiceManager игнорирует его, пока микрофон уже включён.
       sentDown = true;
     } else {
       // keyup отправляем всегда, чтобы микрофон не «залипал».

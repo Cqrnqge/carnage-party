@@ -451,12 +451,29 @@
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.68);
 }
 
-/* Приглашение и смена ссылки. */
+/* Приглашение, рация и смена ссылки. */
 .watch-invite {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
+}
+
+.watch-ptt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.watch-ptt.active {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: rgba(34, 197, 94, 0.5);
+  color: #7df0a6;
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.18);
 }
 
 .watch-source-form {
@@ -885,6 +902,10 @@
 }
 
 @media (max-width: 560px) {
+  .watch-ptt span {
+    display: none;
+  }
+
   .watch-setup-modal {
     padding: 20px 16px 16px;
   }

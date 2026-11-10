@@ -23,6 +23,7 @@ import { cx } from '../../utils';
 
 function sourceTypeLabel(source) {
   if (!source) return 'аудио';
+  if (source.origin === 'vk-audio') return 'VK Music';
   if (source.type === 'youtube') return 'YouTube';
   if (source.type === 'rutube') return 'Rutube';
   if (source.type === 'vk') return 'VK Видео';
@@ -179,7 +180,7 @@ export default function MusicBotModal({ channelId, serverId } = {}) {
     }
     const value = url.trim();
     if (!/^https?:\/\//i.test(value)) {
-      setError('Вставьте ссылку на YouTube, Rutube, VK Видео, трек, клип или радио (http/https)');
+      setError('Вставьте ссылку на YouTube, Rutube, VK Видео, VK Music, трек, клип или радио (http/https)');
       return;
     }
     setBusy('play');
@@ -318,7 +319,7 @@ export default function MusicBotModal({ channelId, serverId } = {}) {
                 if (file) setFile(null);
                 if (error) setError('');
               }}
-              placeholder="https://youtube.com/watch?v=…, rutube.ru/video/…, vkvideo.ru/video… или радио"
+              placeholder="https://youtube.com/watch?v=…, rutube.ru/video/…, vkvideo.ru/video…, vk.ru/audio?q=… или радио"
               inputMode="url"
               autoFocus
               aria-label="Ссылка на музыку"
@@ -367,6 +368,7 @@ export default function MusicBotModal({ channelId, serverId } = {}) {
             <span className="music-bot-chip"><Play size={12} /> YouTube и клипы</span>
             <span className="music-bot-chip"><Clapperboard size={12} /> Rutube</span>
             <span className="music-bot-chip"><Film size={12} /> VK Видео</span>
+            <span className="music-bot-chip"><Music2 size={12} /> VK Music</span>
             <span className="music-bot-chip"><FileAudio size={12} /> Файл с компьютера</span>
             <span className="music-bot-chip"><Radio size={12} /> HLS и радио</span>
           </div>

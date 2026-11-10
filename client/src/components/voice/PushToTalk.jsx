@@ -34,8 +34,16 @@ export default function PushToTalk() {
     return desktop.onPtt(({ state }) => {
       const current = useApp.getState();
       if (!current.settings.pushToTalk || !current.voice.joined) return;
-      if (state === 'down') voiceManager.pttStart();
-      else if (state === 'up') voiceManager.pttEnd();
+      if (state === 'up') {
+        voiceManager.pttEnd();
+        return;
+      }
+      if (state !== 'down') return;
+      // Глобальное событие приходит и при активном окне. Не включаем микрофон,
+      // только если пользователь действительно печатает: фокус внутри
+      // <webview>/iframe даёт activeElement не input, и рация должна работать.
+      if (document.hasFocus() && isTypingTarget(document.activeElement)) return;
+      voiceManager.pttStart();
     });
   }, []);
 

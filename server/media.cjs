@@ -430,6 +430,60 @@ async function resolveYouTube(videoId, { force = false } = {}) {
   return task;
 }
 
+const youtubeSearchCache = new Map();
+const YOUTUBE_SEARCH_TTL = 30 * 60 * 1000;
+
+function searchVideoDuration(video) {
+  const seconds = Number(video?.duration?.seconds);
+  if (Number.isFinite(seconds) && seconds > 0) return Math.floor(seconds);
+  const text = String(
+    video?.length_text?.text || video?.duration?.text || video?.duration_text || ''
+  );
+  const parts = text.split(':').map((part) => Number(part));
+  if (!parts.length || parts.some((part) => !Number.isFinite(part))) return 0;
+  return parts.reduce((total, part) => total * 60 + part, 0);
+}
+
+// Ищет трек на YouTube. Используется как запасной путь для ссылок VK Music:
+// анонимный VK не отдаёт поиск аудио и прямые mp3.
+async function searchYouTube(query, { force = false } = {}) {
+  const text = String(query || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!text) throw new Error('Не указан поисковый запрос');
+
+  const key = text.toLowerCase();
+  const cached = youtubeSearchCache.get(key);
+  if (!force && cached && Date.now() - cached.at < YOUTUBE_SEARCH_TTL) return cached;
+
+  const yt = await getInnertube();
+  const results = await yt.search(text, { type: 'video' });
+  const videos = Array.isArray(results?.videos) ? results.videos : [];
+  let fallback = null;
+
+  for (const video of videos) {
+    const id = String(video?.video_id || video?.id || '').trim();
+    if (!/^[a-zA-Z0-9_-]{6,20}$/.test(id)) continue;
+    const entry = {
+      videoId: id,
+      title:
+        String(video?.title?.toString?.() || video?.title || '').trim().slice(0, 200) || text,
+      duration: searchVideoDuration(video),
+      author: String(video?.author?.name || '').trim().slice(0, 120),
+      live: Boolean(video?.is_live),
+      at: Date.now(),
+    };
+    if (!fallback) fallback = entry;
+    if (entry.live) continue;
+    youtubeSearchCache.set(key, entry);
+    return entry;
+  }
+
+  if (fallback) {
+    youtubeSearchCache.set(key, fallback);
+    return fallback;
+  }
+  throw new Error('YouTube не нашёл подходящий трек');
+}
+
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -811,6 +865,7 @@ function rewritePlaylist(text, baseUrl, makeUrl) {
 module.exports = {
   USER_AGENT,
   resolveYouTube,
+  searchYouTube,
   resolveRutube,
   resolveVk,
   isAllowedUpstream,

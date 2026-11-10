@@ -211,11 +211,13 @@ export default function MusicPlayer() {
         setBlocked(true);
         if (err?.name !== 'NotAllowedError') {
           setError(
-            session?.source?.type === 'youtube'
-              ? 'Не удалось воспроизвести аудиопоток YouTube'
-              : session?.source?.type === 'vk'
-                ? 'Не удалось воспроизвести VK Видео'
-                : 'Не удалось воспроизвести аудио'
+            session?.source?.origin === 'vk-audio'
+              ? 'Не удалось воспроизвести трек VK Music'
+              : session?.source?.type === 'youtube'
+                ? 'Не удалось воспроизвести аудиопоток YouTube'
+                : session?.source?.type === 'vk'
+                  ? 'Не удалось воспроизвести VK Видео'
+                  : 'Не удалось воспроизвести аудио'
           );
         }
       });
@@ -421,17 +423,19 @@ export default function MusicPlayer() {
       ? Math.min(100, (Math.max(0, displayPosition) / totalDuration) * 100)
       : 0;
   const typeLabel =
-    session?.source?.type === 'youtube'
-      ? 'YouTube'
-      : session?.source?.type === 'rutube'
-        ? 'Rutube'
-        : session?.source?.type === 'hls'
-          ? 'HLS-поток'
-          : session?.source?.type === 'radio'
-            ? 'Радио'
-            : session?.source?.type === 'file'
-              ? 'Файл'
-              : 'Аудио';
+    session?.source?.origin === 'vk-audio'
+      ? 'VK Music'
+      : session?.source?.type === 'youtube'
+        ? 'YouTube'
+        : session?.source?.type === 'rutube'
+          ? 'Rutube'
+          : session?.source?.type === 'hls'
+            ? 'HLS-поток'
+            : session?.source?.type === 'radio'
+              ? 'Радио'
+              : session?.source?.type === 'file'
+                ? 'Файл'
+                : 'Аудио';
 
   const control = async (action) => {
     if (!session?.botId || busy) return;
@@ -485,7 +489,7 @@ export default function MusicPlayer() {
     if (!session?.botId || busy || uploading) return;
     const value = sourceUrl.trim();
     if (!/^https?:\/\//i.test(value)) {
-      setSourceError('Вставьте ссылку http(s):// — YouTube, Rutube, HLS или радио');
+      setSourceError('Вставьте ссылку http(s):// — YouTube, Rutube, VK Music, HLS или радио');
       return;
     }
     setBusy(true);
@@ -624,9 +628,11 @@ export default function MusicPlayer() {
           if (modeRef.current !== 'audio') return;
           setBlocked(true);
           setError(
-            session?.source?.type === 'youtube'
-              ? 'Не удалось включить YouTube: сервер не отдал аудиопоток'
-              : 'Не удалось воспроизвести аудио'
+            session?.source?.origin === 'vk-audio'
+              ? 'Не удалось включить трек VK Music: сервер не отдал аудиопоток'
+              : session?.source?.type === 'youtube'
+                ? 'Не удалось включить YouTube: сервер не отдал аудиопоток'
+                : 'Не удалось воспроизвести аудио'
           );
         }}
       />
@@ -801,7 +807,7 @@ export default function MusicPlayer() {
                   setSourceUrl(event.target.value);
                   if (sourceError) setSourceError('');
                 }}
-                placeholder="Ссылка YouTube, Rutube, HLS или радио"
+                placeholder="Ссылка YouTube, Rutube, VK Music, HLS или радио"
                 inputMode="url"
                 autoFocus
                 aria-label="Новая ссылка на трек"

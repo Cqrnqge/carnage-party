@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cx } from '../../utils';
@@ -13,6 +13,24 @@ export default function Modal({
   showClose = false,
   hideHeader = false,
 }) {
+  const modalRef = useRef(null);
+
+  useEffect(() => {
+    const node = modalRef.current;
+    if (!node) return;
+    const active = document.activeElement;
+    // Модалка открывается поверх чата: если фокус остался в поле под
+    // оверлеем, клавиши (в том числе рация) продолжают уходить туда.
+    // Забираем фокус себе, но не мешаем autoFocus внутри самой модалки.
+    if (active && node.contains(active)) return;
+    try {
+      active?.blur?.();
+    } catch {}
+    try {
+      node.focus({ preventScroll: true });
+    } catch {}
+  }, []);
+
   useEffect(() => {
     if (!closeOnEscape) return undefined;
     const handler = (event) => {
@@ -32,7 +50,7 @@ export default function Modal({
         if (closeOnOverlay && event.target === event.currentTarget) onClose?.();
       }}
     >
-      <div className={cx('modal', className)} role="dialog" aria-modal="true">
+      <div ref={modalRef} tabIndex={-1} className={cx('modal', className)} role="dialog" aria-modal="true">
         {showClose ? (
           <button className="modal-close icon-btn" onClick={onClose} aria-label="Закрыть">
             <X size={20} />
