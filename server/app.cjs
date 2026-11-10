@@ -2598,10 +2598,24 @@ function startServer(options = {}) {
           continue;
         }
         if (!upstream.ok && upstream.status !== 206) {
+          console.warn(
+            '[music] YouTube upstream:',
+            upstream.status,
+            'range:',
+            req.headers.range || '-',
+            'host:',
+            (() => {
+              try {
+                return new URL(session.playback.streamUrl).host;
+              } catch {
+                return '-';
+              }
+            })()
+          );
           try {
             await upstream.body?.cancel();
           } catch {}
-          return fail(res, 'YouTube не отдал аудиопоток', 502);
+          return fail(res, `YouTube не отдал аудиопоток (HTTP ${upstream.status})`, 502);
         }
         pipeResponse(res, upstream);
         return;

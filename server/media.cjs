@@ -13,9 +13,12 @@ const YOUTUBE_TTL = 60 * 60 * 1000;
 const RUTUBE_TTL = 10 * 60 * 1000;
 // YouTube периодически меняет требования к клиентам. Пробуем несколько
 // клиентов подряд: если один получает отказ или не отдаёт ссылку, следующий
-// часто всё равно работает. IOS, ANDROID_VR и VISIONOS отдают готовую
-// ссылку без расшифровки подписи, поэтому идут первыми.
-const YOUTUBE_CLIENTS = ['IOS', 'ANDROID_VR', 'VISIONOS', 'MWEB', 'ANDROID', 'WEB', 'TV'];
+// часто всё равно работает. VISIONOS отдаёт готовую ссылку без расшифровки
+// подписи и разрешает читать файл с любого смещения. IOS и ANDROID_VR тоже
+// отдают ссылку, но у них она часто ограничена первым мегабайтом — такие
+// ссылки браузер воспроизвести не может.
+const YOUTUBE_CLIENTS = ['VISIONOS', 'IOS', 'ANDROID_VR', 'MWEB', 'ANDROID', 'WEB', 'TV'];
+const YOUTUBE_PROBE_BYTES = 1024;
 
 const DNS_TTL = 5 * 60 * 1000;
 const DNS_TIMEOUT = 5000;
@@ -301,6 +304,29 @@ function getInnertube() {
   return innertubePromise;
 }
 
+// Проверяет, что ссылка googlevideo отдаёт не только начало файла: у IOS и
+// ANDROID_VR YouTube часто разрешает чтение лишь первого мегабайта. Запрос
+// последнего килобайта быстро показывает, можно ли отдать весь трек.
+async function youtubeStreamReadable(url) {
+  try {
+    const size = Number(new URL(String(url)).searchParams.get('clen')) || 0;
+    if (size <= YOUTUBE_PROBE_BYTES) return true;
+    const start = size - YOUTUBE_PROBE_BYTES;
+    const response = await fetchUpstream(
+      { headers: { range: `bytes=${start}-${size - 1}` } },
+      url,
+      { range: true }
+    );
+    const ok = response.status === 206 || response.status === 200;
+    try {
+      await response.body?.cancel();
+    } catch {}
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 // Перебирает клиентов YouTube на одной сессии. Возвращает поток или null.
 async function resolveYouTubeWith(yt, id, failures) {
   for (const client of YOUTUBE_CLIENTS) {
@@ -333,8 +359,14 @@ async function resolveYouTubeWith(yt, id, failures) {
         continue;
       }
 
+      const streamUrl = String(url);
+      if (!(await youtubeStreamReadable(streamUrl))) {
+        failures.push(`${client}: ссылка ограничена по диапазону`);
+        continue;
+      }
+
       return {
-        streamUrl: String(url),
+        streamUrl,
         mime: format.mime_type || 'audio/mp4',
         title: info.basic_info?.title || '',
         duration: Math.max(0, Number(info.basic_info?.duration) || 0),

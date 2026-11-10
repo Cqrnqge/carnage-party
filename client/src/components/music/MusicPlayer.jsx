@@ -90,6 +90,7 @@ export default function MusicPlayer() {
   );
 
   const audioRef = useRef(null);
+  const audioSrcRef = useRef('');
   const ytHostRef = useRef(null);
   const ytPlayerRef = useRef(null);
   const hlsRef = useRef(null);
@@ -138,6 +139,7 @@ export default function MusicPlayer() {
     } catch {}
     hlsRef.current = null;
     const audio = audioRef.current;
+    audioSrcRef.current = '';
     if (audio) {
       try {
         audio.pause();
@@ -171,22 +173,50 @@ export default function MusicPlayer() {
     }
   };
 
-  const attemptPlay = () => {
+  const attemptPlay = (retry = false) => {
     const player = ytPlayerRef.current;
-    if (player?.playVideo) {
-      try {
-        player.unMute?.();
-        player.playVideo();
-        setBlocked(false);
-      } catch {}
+    // В режиме IFrame отдельный <audio> пуст: его play() всегда завершается
+    // ошибкой и раньше возвращал кнопку «Включить звук» обратно.
+    if (modeRef.current === 'youtube' || player?.playVideo) {
+      if (player?.playVideo) {
+        try {
+          const mute = localMuted || deafened;
+          player.setVolume?.(volume);
+          if (mute) player.mute?.();
+          else player.unMute?.();
+          player.playVideo();
+          setBlocked(false);
+          setError('');
+        } catch {}
+      }
+      return;
     }
     const audio = audioRef.current;
-    if (audio) {
-      audio
-        .play()
-        .then(() => setBlocked(false))
-        .catch(() => setBlocked(true));
+    if (!audio) return;
+    // После ошибки формата браузер не делает новый запрос, пока элемент не
+    // перезагружен. Пользовательская кнопка должна повторять загрузку потока.
+    if (retry && modeRef.current === 'audio' && audioSrcRef.current && (audio.error || !audio.src)) {
+      try {
+        audio.src = audioSrcRef.current;
+        audio.load();
+      } catch {}
     }
+    audio
+      .play()
+      .then(() => {
+        setBlocked(false);
+        setError('');
+      })
+      .catch((err) => {
+        setBlocked(true);
+        if (err?.name !== 'NotAllowedError') {
+          setError(
+            session?.source?.type === 'youtube'
+              ? 'Не удалось воспроизвести аудиопоток YouTube'
+              : 'Не удалось воспроизвести аудио'
+          );
+        }
+      });
   };
 
   // Загрузка источника при смене трека.
@@ -291,7 +321,8 @@ export default function MusicPlayer() {
             audio.load();
           }
         } else {
-          audio.src = assetUrl(source.streamUrl || source.url);
+          audioSrcRef.current = assetUrl(source.streamUrl || source.url);
+          audio.src = audioSrcRef.current;
           audio.load();
         }
         if (session.playing) attemptPlay();
@@ -579,7 +610,24 @@ export default function MusicPlayer() {
   return (
     <>
       <div ref={ytHostRef} className="music-audio-host" aria-hidden="true" />
-      <audio ref={audioRef} className="music-audio-host" preload="auto" />
+      <audio
+        ref={audioRef}
+        className="music-audio-host"
+        preload="auto"
+        onPlaying={() => {
+          setBlocked(false);
+          setError('');
+        }}
+        onError={() => {
+          if (modeRef.current !== 'audio') return;
+          setBlocked(true);
+          setError(
+            session?.source?.type === 'youtube'
+              ? 'Не удалось включить YouTube: сервер не отдал аудиопоток'
+              : 'Не удалось воспроизвести аудио'
+          );
+        }}
+      />
       {visible ? (
       <div
         ref={playerRef}
@@ -624,7 +672,7 @@ export default function MusicPlayer() {
         </div>
         <div className="music-controls" data-no-drag>
           {blocked ? (
-            <button type="button" className="btn btn-primary btn-small" onClick={attemptPlay}>
+            <button type="button" className="btn btn-primary btn-small" onClick={() => attemptPlay(true)}>
               <Volume2 size={15} /> Включить звук
             </button>
           ) : null}
