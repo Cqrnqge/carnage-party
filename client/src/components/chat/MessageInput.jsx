@@ -1,5 +1,5 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { File, Image as ImageIcon, Loader2, Lock, Mic, Paperclip, Send, Smile, Trash2, X } from 'lucide-react';
+import { File, Image as ImageIcon, Loader2, Lock, Mic, Paperclip, Send, Smile, Trash2, Video, X } from 'lucide-react';
 import { api } from '../../api';
 import { useApp } from '../../store';
 import { hasPermission } from '../../constants';
@@ -51,6 +51,15 @@ const MessageInput = forwardRef(function MessageInput({ channel, server }, ref) 
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [recordWave, setRecordWave] = useState(() => new Array(WAVEFORM_BARS).fill(0));
+  const videoRecorderRef = useRef(null);
+  const videoStreamRef = useRef(null);
+  const videoChunksRef = useRef([]);
+  const videoTimerRef = useRef(null);
+  const videoStartedAtRef = useRef(0);
+  const videoCancelledRef = useRef(false);
+  const videoNoteRef = useRef(null);
+  const [videoRecording, setVideoRecording] = useState(false);
+  const [videoSeconds, setVideoSeconds] = useState(0);
 
   const canSend = channel?.type === 'dm' || !server || hasPermission(server, user?.id, 'SEND_MESSAGES');
   const canAttach = channel?.type === 'dm' || !server || hasPermission(server, user?.id, 'ATTACH_FILES');
@@ -75,7 +84,7 @@ const MessageInput = forwardRef(function MessageInput({ channel, server }, ref) 
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = '0px';
-    const next = Math.min(220, Math.max(44, el.scrollHeight));
+    const next = Math.min(220, Math.max(32, el.scrollHeight));
     el.style.height = `${next}px`;
   }, [text]);
 
@@ -327,8 +336,142 @@ const MessageInput = forwardRef(function MessageInput({ channel, server }, ref) 
     }
   };
 
+  const stopVideoStream = () => {
+    const stream = videoStreamRef.current;
+    videoStreamRef.current = null;
+    if (stream) {
+      for (const track of stream.getTracks()) {
+        try { track.stop(); } catch {}
+      }
+    }
+    const video = videoNoteRef.current;
+    if (video) {
+      try { video.srcObject = null; } catch {}
+    }
+  };
+
+  const resetVideoRecorder = () => {
+    if (videoTimerRef.current) {
+      clearInterval(videoTimerRef.current);
+      videoTimerRef.current = null;
+    }
+    setVideoRecording(false);
+    setVideoSeconds(0);
+  };
+
+  const sendVideoNote = async (blob, duration) => {
+    setSending(true);
+    try {
+      const activeReply = useApp.getState().replyTo;
+      const form = new FormData();
+      form.append('videoNote', '1');
+      form.append('duration', String(Math.max(1, Math.round(duration))));
+      const type = blob.type || 'video/webm';
+      const ext = type.includes('mp4') ? 'mp4' : 'webm';
+      form.append('files', blob, `video-note-${Date.now()}.${ext}`);
+      if (activeReply?.id) form.append('replyTo', activeReply.id);
+      const data = await api(`/api/channels/${channel.id}/messages`, { method: 'POST', body: form });
+      if (data?.message) receiveMessage({ message: data.message });
+      setReplyTo(null);
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const startVideoNote = async () => {
+    if (videoRecording || recording || sending) return;
+    if (!canAttach) {
+      toast('У вас нет права прикреплять файлы', 'error');
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      toast('Запись видео не поддерживается на этом устройстве', 'error');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } },
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
+      videoStreamRef.current = stream;
+      const candidates = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+        'video/mp4',
+      ];
+      const mimeType = candidates.find((type) => window.MediaRecorder.isTypeSupported?.(type)) || '';
+      const options = { videoBitsPerSecond: 1200000, audioBitsPerSecond: 96000 };
+      if (mimeType) options.mimeType = mimeType;
+      const recorder = new MediaRecorder(stream, options);
+      videoRecorderRef.current = recorder;
+      videoChunksRef.current = [];
+      videoCancelledRef.current = false;
+      videoStartedAtRef.current = Date.now();
+      setVideoSeconds(0);
+      setVideoRecording(true);
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) videoChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const duration = (Date.now() - videoStartedAtRef.current) / 1000;
+        const chunks = videoChunksRef.current;
+        videoChunksRef.current = [];
+        resetVideoRecorder();
+        stopVideoStream();
+        if (videoCancelledRef.current) return;
+        if (duration < 0.8 || !chunks.length) {
+          toast('Слишком короткий кружок', 'info');
+          return;
+        }
+        const blob = new Blob(chunks, {
+          type: recorder.mimeType || chunks[0]?.type || 'video/webm',
+        });
+        sendVideoNote(blob, duration);
+      };
+      recorder.start(1000);
+      videoTimerRef.current = setInterval(() => {
+        const elapsed = (Date.now() - videoStartedAtRef.current) / 1000;
+        setVideoSeconds(elapsed);
+        if (elapsed >= 60) {
+          videoCancelledRef.current = false;
+          try { recorder.stop(); } catch {}
+        }
+      }, 250);
+    } catch {
+      stopVideoStream();
+      setVideoRecording(false);
+      setVideoSeconds(0);
+      toast('Не удалось получить доступ к камере и микрофону', 'error');
+    }
+  };
+
+  const stopVideoNote = () => {
+    const recorder = videoRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') return;
+    videoCancelledRef.current = false;
+    try { recorder.stop(); } catch {}
+  };
+
+  const cancelVideoNote = () => {
+    videoCancelledRef.current = true;
+    if (videoTimerRef.current) {
+      clearInterval(videoTimerRef.current);
+      videoTimerRef.current = null;
+    }
+    const recorder = videoRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      try { recorder.stop(); } catch {}
+    } else {
+      resetVideoRecorder();
+      stopVideoStream();
+    }
+  };
+
   const startRecording = async () => {
-    if (recording || sending) return;
+    if (recording || sending || videoRecording) return;
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
       toast('Запись голоса не поддерживается на этом устройстве', 'error');
       return;
@@ -428,7 +571,21 @@ const MessageInput = forwardRef(function MessageInput({ channel, server }, ref) 
     stopAnalysis();
     waveSamples.current = [];
     stopStream();
+    videoCancelledRef.current = true;
+    if (videoTimerRef.current) clearInterval(videoTimerRef.current);
+    const videoRecorder = videoRecorderRef.current;
+    if (videoRecorder && videoRecorder.state !== 'inactive') {
+      try { videoRecorder.stop(); } catch {}
+    }
+    stopVideoStream();
   }, []);
+
+  useEffect(() => {
+    const video = videoNoteRef.current;
+    if (!video || !videoRecording || !videoStreamRef.current) return;
+    video.srcObject = videoStreamRef.current;
+    video.play().catch(() => {});
+  }, [videoRecording]);
 
   const onKeyDown = (event) => {
     if (mention) {
@@ -559,6 +716,43 @@ const MessageInput = forwardRef(function MessageInput({ channel, server }, ref) 
         </div>
       ) : null}
 
+      {videoRecording ? (
+        <div className="video-note-recorder">
+          <div className="video-note-preview">
+            <video ref={videoNoteRef} autoPlay playsInline muted />
+            <span className="video-note-preview-time">{formatRecordTime(videoSeconds)}</span>
+          </div>
+          <div className="video-note-recorder-main">
+            <div className="video-note-recorder-title">
+              <span className="voice-recording-dot" />
+              <strong>Кружок</strong>
+              <span>{formatRecordTime(videoSeconds)} / 1:00</span>
+            </div>
+            <div className="video-note-recorder-hint">
+              Смотрите в камеру — круглое видео отправится в чат
+            </div>
+          </div>
+          <button
+            className="icon-btn danger"
+            onClick={cancelVideoNote}
+            title="Отменить запись"
+            type="button"
+          >
+            <Trash2 size={18} />
+          </button>
+          <button
+            className="send-btn active"
+            onClick={stopVideoNote}
+            title="Отправить кружок"
+            type="button"
+          >
+            <Send size={18} />
+          </button>
+        </div>
+      ) : null}
+
+      {videoRecording ? null : (
+      <>
       <div className="message-input-bar">
         <button
           className="icon-btn input-action"
@@ -617,6 +811,16 @@ const MessageInput = forwardRef(function MessageInput({ channel, server }, ref) 
         </button>
         {!recording && !text.trim() && !files.length ? (
           <button
+            className="icon-btn input-action video-note-btn"
+            onClick={startVideoNote}
+            disabled={sending}
+            title="Записать видео-кружок"
+          >
+            <Video size={20} />
+          </button>
+        ) : null}
+        {!recording && !text.trim() && !files.length ? (
+          <button
             className="icon-btn input-action mic-btn"
             onClick={startRecording}
             disabled={sending}
@@ -641,6 +845,8 @@ const MessageInput = forwardRef(function MessageInput({ channel, server }, ref) 
         <span><kbd>Shift</kbd> + <kbd>Enter</kbd> — новая строка</span>
         {text.length > 3600 ? <span className={cx('char-count', text.length >= 4000 && 'limit')}>{text.length}/4000</span> : null}
       </div>
+      </>
+      )}
     </div>
   );
 });

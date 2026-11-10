@@ -11,6 +11,7 @@ export const PERMISSIONS = [
   { key: 'MANAGE_MESSAGES', label: 'Управление сообщениями', hint: 'Удаление и закрепление чужих сообщений' },
   { key: 'KICK_MEMBERS', label: 'Кик участников', hint: 'Исключение участников с сервера' },
   { key: 'BAN_MEMBERS', label: 'Бан участников', hint: 'Блокировка входа на сервер' },
+  { key: 'MUTE_MEMBERS', label: 'Мут участников', hint: 'Запрет говорить в голосовых каналах' },
   { key: 'VIEW_CHANNELS', label: 'Просмотр каналов', hint: 'Видеть каналы сервера' },
   { key: 'SEND_MESSAGES', label: 'Отправка сообщений', hint: 'Писать в текстовые каналы' },
   { key: 'ATTACH_FILES', label: 'Вложения', hint: 'Прикреплять файлы и изображения' },

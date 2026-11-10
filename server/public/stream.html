@@ -735,6 +735,20 @@
     (function () {
       'use strict';
       var ICE_SERVERS = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+      var ICE_EXPIRES_AT = 0;
+      function refreshIce() {
+        if (ICE_EXPIRES_AT > Date.now() + 30000) return Promise.resolve();
+        return fetch('/api/ice?userId=stream-viewer', { cache: 'no-store' })
+          .then(function (response) { return response.ok ? response.json() : null; })
+          .then(function (data) {
+            var servers = data && Array.isArray(data.iceServers) ? data.iceServers : null;
+            if (servers && servers.length) ICE_SERVERS = servers;
+            var ttl = data && Number(data.ttl) || 0;
+            ICE_EXPIRES_AT = Date.now() + (ttl > 0 ? Math.max(300000, ttl * 1000 - 60000) : 3600000);
+          })
+          .catch(function () { ICE_EXPIRES_AT = Date.now() + 300000; });
+      }
+      refreshIce();
       var streamId = (location.pathname.split('/').filter(Boolean).pop() || '').replace(/[^a-z0-9_-]/gi, '');
       var player = document.getElementById('player');
       var stage = document.getElementById('stage');
@@ -1140,7 +1154,8 @@
         muteLabel.textContent = player.muted ? 'Звук' : 'Выкл. звук';
       });
 
-      function createPeer(offerFrom) {
+      async function createPeer(offerFrom) {
+        await refreshIce();
         closePeer();
         remote = new MediaStream();
         pendingCandidates = [];
@@ -1182,7 +1197,7 @@
         try {
           if (data.type === 'offer') {
             hostId = from;
-            var connection = createPeer(from);
+            var connection = await createPeer(from);
             await connection.setRemoteDescription(new RTCSessionDescription(data.sdp));
             for (var i = 0; i < pendingCandidates.length; i += 1) {
               try { await connection.addIceCandidate(new RTCIceCandidate(pendingCandidates[i])); } catch (err) {}

@@ -1,11 +1,6 @@
 import { useApp } from './store';
 import { playSound } from './sounds';
-
-const ICE_SERVERS = [
-  {
-    urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'],
-  },
-];
+import { iceConfig, refreshIceConfig } from './ice';
 
 function audioConstraints(deviceId) {
   const audio = {
@@ -81,6 +76,7 @@ class VoiceManager {
     this.channelId = null;
     this.joined = false;
     this.muted = false;
+    this.serverMuted = false;
     this.deafened = false;
     this.pttActive = false;
     this.pttPrevMuted = false;
@@ -100,12 +96,14 @@ class VoiceManager {
     this.socket = socket;
     socket.on('voice:signal', this.handleSignal);
     socket.on('voice:state', this.handleVoiceState);
+    socket.on('voice:force-mute', this.handleForceMute);
   }
 
   detachSocket() {
     if (this.socket) {
       this.socket.off('voice:signal', this.handleSignal);
       this.socket.off('voice:state', this.handleVoiceState);
+      this.socket.off('voice:force-mute', this.handleForceMute);
     }
     if (this.joined) {
       this.cleanupLocal();
@@ -130,7 +128,16 @@ class VoiceManager {
     if (!this.joined || channelId !== this.channelId) return;
     const me = useApp.getState().user;
     const list = participants || [];
-    if (me && !list.some((p) => p.userId === me.id)) {
+    const self = me ? list.find((p) => p.userId === me.id) : null;
+    if (self) {
+      const serverMuted = Boolean(self.serverMuted);
+      if (serverMuted !== this.serverMuted) {
+        this.serverMuted = serverMuted;
+        if (serverMuted) this.applyServerMute();
+        useApp.getState().setVoice({ serverMuted });
+      }
+    }
+    if (me && !self) {
       if (this.joined) playSound('leave');
       this.cleanupLocal();
       this.joined = false;
@@ -139,11 +146,35 @@ class VoiceManager {
       useApp.getState().toast('Вы больше не в голосовом канале', 'info');
       return;
     }
-    const remoteIds = new Set(list.filter((p) => p.userId !== me?.id).map((p) => p.userId));
+    const remoteIds = new Set(
+      list
+        .filter((p) => p.userId !== me?.id && !p.bot && !p.user?.bot)
+        .map((p) => p.userId)
+    );
     for (const userId of [...this.pcs.keys()]) {
       if (!remoteIds.has(userId)) this.closePeer(userId);
     }
     for (const userId of remoteIds) this.syncRemoteStreams(userId);
+  };
+
+  applyServerMute() {
+    this.muted = true;
+    for (const track of this.localStream?.getAudioTracks?.() || []) track.enabled = false;
+    this.emitSpeaking(false);
+  }
+
+  handleForceMute = ({ muted }) => {
+    this.serverMuted = Boolean(muted);
+    if (this.serverMuted) this.applyServerMute();
+    useApp.getState().setVoice({ serverMuted: this.serverMuted, muted: this.muted });
+    useApp
+      .getState()
+      .toast(
+        muted
+          ? 'Администратор запретил вам говорить в голосовых каналах'
+          : 'Администратор снова разрешил вам говорить',
+        muted ? 'error' : 'success'
+      );
   };
 
   async join(channelId) {
@@ -159,6 +190,7 @@ class VoiceManager {
 
     const state = useApp.getState();
     const settings = state.settings;
+    const iceReady = refreshIceConfig(state.user?.id);
     this.deafened = false;
     this.muted = false;
     this.channelId = channelId;
@@ -194,6 +226,7 @@ class VoiceManager {
       deafened: this.deafened,
       voiceStreamId: this.localStream?.id || '',
     };
+    await iceReady;
     this.socket.timeout(12000).emit('voice:join', payload, (err, res) => {
       if (this.channelId !== channelId) return;
       if (err || !res?.ok) {
@@ -206,16 +239,20 @@ class VoiceManager {
       }
       this.joined = true;
       this.muted = Boolean(res.self?.muted);
+      this.serverMuted = Boolean(res.self?.serverMuted);
       this.deafened = Boolean(res.self?.deafened);
+      if (this.serverMuted) this.applyServerMute();
       useApp.getState().setVoice({
         channelId,
         joined: true,
         connecting: false,
         muted: this.muted,
+        serverMuted: this.serverMuted,
         deafened: this.deafened,
         participants: res.participants || [],
       });
       for (const participant of res.participants || []) {
+        if (participant.bot || participant.user?.bot) continue;
         this.createPeer(participant.userId, true);
       }
       this.startVAD();
@@ -258,6 +295,7 @@ class VoiceManager {
     this.screenOn = false;
     this.speaking = false;
     this.muted = false;
+    this.serverMuted = false;
     this.deafened = false;
     this.pttActive = false;
     this.pttPrevMuted = false;
@@ -294,7 +332,7 @@ class VoiceManager {
     const existing = this.pcs.get(userId);
     if (existing) return existing;
 
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection(iceConfig());
     this.pcs.set(userId, pc);
 
     if (this.localStream) {
@@ -657,6 +695,10 @@ class VoiceManager {
 
   async enableMic() {
     if (!this.joined) return;
+    if (this.serverMuted) {
+      useApp.getState().toast('Администратор запретил вам говорить в голосовых каналах', 'error');
+      return;
+    }
     try {
       const stream = await requestMic(useApp.getState().settings.inputDevice);
       this.localStream = stream;
@@ -688,6 +730,10 @@ class VoiceManager {
       useApp.getState().toast('Сначала подключитесь к голосовому каналу', 'info');
       return;
     }
+    if (this.serverMuted) {
+      useApp.getState().toast('Администратор запретил вам говорить в голосовых каналах', 'error');
+      return;
+    }
     if (!this.localStream) {
       await this.enableMic();
       return;
@@ -703,7 +749,7 @@ class VoiceManager {
 
   // Режим рации: микрофон включается только пока удерживают клавишу/кнопку.
   async pttStart() {
-    if (!this.joined || this.deafened || this.pttActive) return;
+    if (!this.joined || this.deafened || this.pttActive || this.serverMuted) return;
     if (!useApp.getState().settings.pushToTalk) return;
     this.pttActive = true;
     this.pttPrevMuted = this.muted;

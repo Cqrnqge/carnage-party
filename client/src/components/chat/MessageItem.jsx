@@ -138,12 +138,94 @@ function VoiceAttachment({ attachment }) {
   );
 }
 
+function VideoNoteAttachment({ attachment }) {
+  const videoRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const [total, setTotal] = useState(Number(attachment.duration) || 0);
+
+  useEffect(() => {
+    if (!playing) return undefined;
+    let frame = 0;
+    const tick = () => {
+      const video = videoRef.current;
+      if (!video) return;
+      const value = total || video.duration || 0;
+      setProgress(value ? Math.min(1, video.currentTime / value) : 0);
+      setElapsed(video.currentTime || 0);
+      if (!video.paused && !video.ended) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [playing, total]);
+
+  const toggle = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) video.play().catch(() => {});
+    else video.pause();
+  };
+
+  const duration = total || Number(attachment.duration) || 0;
+  const displayTime = playing || elapsed > 0 ? elapsed : duration;
+
+  return (
+    <div className={cx('video-note', playing && 'playing')}>
+      <div
+        className="video-note-ring"
+        style={{ '--video-note-progress': `${Math.round(progress * 360)}deg` }}
+      >
+        <button
+          type="button"
+          className="video-note-circle"
+          onClick={toggle}
+          title={playing ? 'Пауза' : 'Воспроизвести кружок'}
+        >
+          <video
+            ref={videoRef}
+            src={assetUrl(attachment.url)}
+            playsInline
+            preload="metadata"
+            onLoadedMetadata={(event) => {
+              const value = event.currentTarget.duration;
+              if (Number.isFinite(value) && value > 0) setTotal(value);
+            }}
+            onTimeUpdate={(event) => {
+              const video = event.currentTarget;
+              const value = total || video.duration || 0;
+              setProgress(value ? video.currentTime / value : 0);
+              setElapsed(video.currentTime || 0);
+            }}
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            onEnded={() => {
+              setPlaying(false);
+              setProgress(0);
+              setElapsed(0);
+            }}
+          />
+          {!playing ? (
+            <span className="video-note-play">
+              <Play size={20} fill="currentColor" />
+            </span>
+          ) : null}
+          <span className="video-note-time">{formatDuration(displayTime)}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Attachment({ attachment, onPreview }) {
   const { mime, name, url, size } = attachment;
   const resolvedUrl = assetUrl(url);
   const sizeLabel = size ? `${(size / 1024).toFixed(1)} КБ` : '';
   if (attachment.kind === 'voice') {
     return <VoiceAttachment attachment={attachment} />;
+  }
+  if (attachment.kind === 'video_note') {
+    return <VideoNoteAttachment attachment={attachment} />;
   }
   if (isImage(mime)) {
     return (

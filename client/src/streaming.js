@@ -3,12 +3,7 @@ import { api, getServerBase, getToken } from './api';
 import { useApp } from './store';
 import { getSocket } from './socket';
 import { rtmpManager } from './rtmp';
-
-const ICE_SERVERS = [
-  {
-    urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'],
-  },
-];
+import { iceConfig, refreshIceConfig } from './ice';
 
 export const CHAT_STYLE_OPTIONS = [
   { id: 'dark', label: 'Тёмный', hint: 'Стекло и неон' },
@@ -320,6 +315,7 @@ class StreamBroadcaster {
     if (this.stream) await this.stop({ silent: true });
     this.chatMessages = [];
     this.chatSelf = null;
+    await refreshIceConfig(useApp.getState().user?.id);
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('Устройство не поддерживает захват камеры или экрана');
     }
@@ -892,7 +888,7 @@ class StreamBroadcaster {
   async createPeer(viewerId) {
     if (!this.socket || !this.localStream) return;
     this.closePeer(viewerId);
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection(iceConfig());
     this.peers.set(viewerId, pc);
     this.iceQueues.set(viewerId, []);
 
@@ -1099,6 +1095,7 @@ export const streamBroadcaster = new StreamBroadcaster();
 // Подключение зрителя. Используется и в приложении, и на публичной
 // странице (там своя реализация на чистом JS).
 export function watchStream(streamId, handlers = {}) {
+  refreshIceConfig().catch(() => {});
   const socket = io(socketUrl(), {
     auth: { streamId, role: 'viewer', token: getToken() || '' },
     transports: ['websocket', 'polling'],
@@ -1130,7 +1127,7 @@ export function watchStream(streamId, handlers = {}) {
     closePeer();
     remote = new MediaStream();
     pendingCandidates = [];
-    pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    pc = new RTCPeerConnection(iceConfig());
     pc.ontrack = (event) => {
       if (event.streams?.[0]) remote = event.streams[0];
       else remote.addTrack(event.track);

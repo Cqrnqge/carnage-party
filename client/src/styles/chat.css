@@ -1032,7 +1032,7 @@
 
 .message-input-bar {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 3px;
   background: var(--bg-3);
   border: 1px solid var(--border);
@@ -1070,7 +1070,7 @@
   width: 32px;
   height: 32px;
   flex: none;
-  margin-bottom: 1px;
+  margin-bottom: 0;
 }
 
 .send-btn {
@@ -1429,6 +1429,11 @@
   flex: none;
 }
 
+.member-mute-icon {
+  flex: none;
+  color: var(--muted-2);
+}
+
 .member-status,
 .member-role-label {
   font-size: 10.5px;
@@ -1725,6 +1730,178 @@ button.forwarded-label:hover b {
   border-radius: 2px;
   background: linear-gradient(180deg, #ff5c8a, #b45cff);
   transition: height 0.08s linear, opacity 0.08s linear;
+}
+
+/* Видео-кружки */
+
+.video-note {
+  display: inline-flex;
+  padding: 2px;
+}
+
+.video-note-ring {
+  width: 190px;
+  height: 190px;
+  max-width: 100%;
+  padding: 3px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--accent) var(--video-note-progress, 0deg),
+    var(--bg-6) 0
+  );
+}
+
+.video-note-circle {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #000;
+  cursor: pointer;
+}
+
+.video-note-circle video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-note-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.32);
+  pointer-events: none;
+}
+
+.video-note-play svg {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+}
+
+.video-note-time {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.video-note-recorder {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 7px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--bg-2);
+  border: 1px solid rgba(255, 61, 113, 0.38);
+  box-shadow: 0 0 0 3px rgba(255, 61, 113, 0.08);
+}
+
+.video-note-preview {
+  position: relative;
+  width: 86px;
+  height: 86px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 50%;
+  border: 2px solid #ff3d71;
+  background: #000;
+  box-shadow: 0 0 0 4px rgba(255, 61, 113, 0.12);
+}
+
+.video-note-preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.video-note-preview-time {
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  transform: translateX(-50%);
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.video-note-recorder-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.video-note-recorder-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.video-note-recorder-title strong {
+  color: #ff8aa6;
+  font-size: 12.5px;
+}
+
+.video-note-recorder-title > span:last-child {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.video-note-recorder-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted-2);
+}
+
+.video-note-btn {
+  color: #b28bff;
+}
+
+.video-note-btn:hover {
+  color: #d0b7ff;
+}
+
+@media (max-width: 720px) {
+  .video-note-ring {
+    width: 150px;
+    height: 150px;
+  }
+
+  .video-note-preview {
+    width: 64px;
+    height: 64px;
+  }
+
+  .video-note-recorder-hint {
+    display: none;
+  }
 }
 
 .icon-btn.danger {

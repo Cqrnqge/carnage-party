@@ -13,8 +13,10 @@ import {
   Palette,
   Play,
   RefreshCw,
+  Send,
   Server,
   Shield,
+  Smartphone,
   Square,
   User,
   Volume2,
@@ -29,6 +31,13 @@ import ServerSettings from '../settings/ServerSettings';
 import UpdateSettings from '../settings/UpdateSettings';
 import { voiceManager } from '../../voice';
 import { appVersion } from '../../version';
+import {
+  disablePush,
+  enablePush,
+  pushState,
+  sendTestPush,
+  syncPushPreferences,
+} from '../../push';
 
 const TABS = [
   { id: 'profile', label: 'Профиль', icon: User },
@@ -40,9 +49,16 @@ const TABS = [
   { id: 'account', label: 'Аккаунт', icon: Shield },
 ];
 
-function Toggle({ checked, onChange, label, hint }) {
+function Toggle({ checked, onChange, label, hint, disabled = false }) {
   return (
-    <button className="toggle-row" onClick={() => onChange(!checked)} type="button">
+    <button
+      className={cx('toggle-row', disabled && 'disabled')}
+      onClick={() => {
+        if (!disabled) onChange(!checked);
+      }}
+      type="button"
+      disabled={disabled}
+    >
       <div>
         <span>{label}</span>
         {hint ? <small>{hint}</small> : null}
@@ -79,6 +95,8 @@ export default function SettingsModal({ tab: initialTab = 'profile' }) {
   const [micTesting, setMicTesting] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [pttListening, setPttListening] = useState(false);
+  const [pushInfo, setPushInfo] = useState(null);
+  const [pushBusy, setPushBusy] = useState(false);
   const testRef = useRef({ stream: null, ctx: null, raf: null });
 
   useEffect(() => {
@@ -93,6 +111,17 @@ export default function SettingsModal({ tab: initialTab = 'profile' }) {
         }
       }
       setDevices(grouped);
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
+
+  useEffect(() => {
+    if (tab !== 'notifications') return undefined;
+    let cancelled = false;
+    pushState().then((info) => {
+      if (!cancelled) setPushInfo(info);
     }).catch(() => {});
     return () => {
       cancelled = true;
@@ -249,6 +278,37 @@ export default function SettingsModal({ tab: initialTab = 'profile' }) {
   };
 
   const changeSetting = (patch) => updateSettings(patch);
+
+  const togglePush = async (enabled) => {
+    setPushBusy(true);
+    try {
+      if (enabled) {
+        await enablePush({ notifyAll: settings.notifyAll });
+        toast('Push-уведомления включены', 'success');
+      } else {
+        await disablePush();
+        toast('Push-уведомления отключены', 'info');
+      }
+      setPushInfo(await pushState());
+    } catch (err) {
+      toast(err.message || 'Не удалось настроить push', 'error');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const testPush = async () => {
+    setPushBusy(true);
+    try {
+      const result = await sendTestPush();
+      if (result?.ok) toast('Тестовое push-уведомление отправлено', 'success');
+      else toast('Не удалось отправить push — проверьте подписку', 'error');
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      setPushBusy(false);
+    }
+  };
 
   const changeInput = async (deviceId) => {
     changeSetting({ inputDevice: deviceId });
@@ -473,10 +533,33 @@ export default function SettingsModal({ tab: initialTab = 'profile' }) {
                 />
                 <Toggle
                   checked={settings.notifyAll}
-                  onChange={(value) => changeSetting({ notifyAll: value })}
+                  onChange={(value) => {
+                    changeSetting({ notifyAll: value });
+                    syncPushPreferences({ notifyAll: value }).catch(() => {});
+                  }}
                   label="Уведомлять о всех сообщениях"
                   hint="Иначе уведомления приходят только для упоминаний и личных сообщений"
                 />
+                <Toggle
+                  checked={Boolean(pushInfo?.subscribed)}
+                  onChange={togglePush}
+                  disabled={pushBusy || !pushInfo?.supported || !pushInfo?.serverEnabled}
+                  label={pushInfo?.subscribed ? 'Push-уведомления включены' : 'Push-уведомления'}
+                  hint="Приходят даже при закрытом приложении или вкладке"
+                />
+                {pushInfo?.subscribed ? (
+                  <div className="settings-inline-actions">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={testPush}
+                      disabled={pushBusy}
+                    >
+                      {pushBusy ? <Loader2 size={15} className="spin" /> : <Send size={15} />}
+                      Отправить тестовое уведомление
+                    </button>
+                  </div>
+                ) : null}
                 <Toggle
                   checked={settings.sounds}
                   onChange={(value) => changeSetting({ sounds: value })}
@@ -486,8 +569,22 @@ export default function SettingsModal({ tab: initialTab = 'profile' }) {
               </div>
               <div className="settings-note">
                 <Info size={16} />
-                <span>В desktop-версии уведомления показываются системно. В браузере нужно разрешение.</span>
+                <span>
+                  {!pushInfo?.supported
+                    ? 'Этот клиент не поддерживает Web Push. В desktop-версии уведомления показываются системно.'
+                    : !pushInfo?.secure
+                      ? 'Push работает только по HTTPS или на localhost.'
+                      : !pushInfo?.serverEnabled
+                        ? 'На сервере не настроены VAPID-ключи для push.'
+                        : 'Push-подписка работает в браузере и desktop-версии. В Android-приложении используются системные уведомления.'}
+                </span>
               </div>
+              {pushInfo?.subscribed ? (
+                <div className="settings-note">
+                  <Smartphone size={16} />
+                  <span>Подписка привязана к этому устройству. Чтобы отключить push на другом устройстве, выключите его там.</span>
+                </div>
+              ) : null}
             </>
           ) : null}
 

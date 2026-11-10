@@ -29,6 +29,22 @@ function makeSerializers(db) {
       customStatus: user.customStatus || '',
       status: user.status || 'offline',
       createdAt: user.createdAt || null,
+      bot: Boolean(user.bot),
+    };
+  }
+
+  function botDTO(bot) {
+    if (!bot) return null;
+    return {
+      id: bot.id,
+      serverId: bot.serverId || null,
+      username: bot.username,
+      displayName: bot.displayName || bot.username,
+      avatar: bot.avatar || null,
+      accentColor: bot.accentColor || '#5865f2',
+      ownerId: bot.ownerId || null,
+      createdAt: bot.createdAt || null,
+      bot: true,
     };
   }
 
@@ -64,6 +80,7 @@ function makeSerializers(db) {
         roleIds: [...(m.roleIds || [])],
         nickname: m.nickname || null,
         joinedAt: m.joinedAt,
+        voiceMuted: Boolean(m.voiceMuted),
         permissions: permissionsOf(server, m.userId),
       })),
     };
@@ -241,6 +258,7 @@ function makeSerializers(db) {
   return {
     publicUser,
     selfUser,
+    botDTO,
     serverDTO,
     channelDTO,
     dmDTO,

@@ -202,6 +202,23 @@ export function connectSocket(token) {
     const state = useApp.getState();
     if (state.voice.channelId === channelId) voiceManager.leave();
     state.removeChannel(channelId);
+    state.applyMusicState({ channelId, session: null });
+  });
+
+  socket.on('bot:created', ({ bot }) => {
+    if (bot) useApp.getState().addBot(bot);
+  });
+
+  socket.on('bot:deleted', ({ botId }) => {
+    if (botId) useApp.getState().removeBot(botId);
+  });
+
+  socket.on('music:state', (payload = {}) => {
+    useApp.getState().applyMusicState(payload);
+  });
+
+  socket.on('music:ended', ({ channelId } = {}) => {
+    if (channelId) useApp.getState().applyMusicState({ channelId, session: null });
   });
 
   socket.on('dm:created', ({ channel }) => {

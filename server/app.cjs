@@ -1,10 +1,11 @@
-'use strict';
+﻿'use strict';
 
 const express = require('express');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { execFile } = require('child_process');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
@@ -29,6 +30,18 @@ const {
 } = require('./permissions.cjs');
 const { makeSerializers } = require('./serializers.cjs');
 const { updateInfo } = require('./updates.cjs');
+const { makeIceConfig } = require('./ice.cjs');
+const { createPushService } = require('./push.cjs');
+const { parseMusicSource, musicDTO } = require('./music.cjs');
+const {
+  resolveYouTube,
+  resolveRutube,
+  isAllowedUpstream,
+  fetchUpstream,
+  pipeResponse,
+  isPlaylist,
+  rewritePlaylist,
+} = require('./media.cjs');
 
 let appVersion = '1.1.0';
 try {
@@ -38,6 +51,23 @@ try {
 const avatarLimit = 900_000;
 const MAX_MESSAGE_LENGTH = 4000;
 const MAX_UPLOAD = 25 * 1024 * 1024;
+const MAX_MUSIC_UPLOAD = 100 * 1024 * 1024;
+const MUSIC_EXTENSIONS = new Set([
+  '.mp3',
+  '.m4a',
+  '.m4b',
+  '.aac',
+  '.ogg',
+  '.oga',
+  '.opus',
+  '.wav',
+  '.flac',
+  '.weba',
+  '.webm',
+  '.mp4',
+  '.aif',
+  '.aiff',
+]);
 
 function startServer(options = {}) {
   const dataDir = path.resolve(options.dataDir || path.join(__dirname, '..', 'data'));
@@ -47,7 +77,9 @@ function startServer(options = {}) {
 
   fs.mkdirSync(dataDir, { recursive: true });
   const uploadsDir = path.join(dataDir, 'uploads');
+  const musicDir = path.join(uploadsDir, 'music');
   fs.mkdirSync(uploadsDir, { recursive: true });
+  fs.mkdirSync(musicDir, { recursive: true });
   // Папка с установщиками новых версий. Сервер сканирует её на лету,
   // поэтому файл можно добавить без перезапуска.
   const updatesDir = path.resolve(
@@ -292,6 +324,16 @@ function startServer(options = {}) {
       reads[state.channelId][state.userId] = state.lastReadAt;
     }
 
+    const music = {};
+    for (const [channelId, session] of musicSessions.entries()) {
+      if (accessibleIds.has(channelId)) music[channelId] = musicSessionDTO(session);
+    }
+
+    const serverIds = new Set(servers.map((server) => server.id));
+    const bots = db.data.bots
+      .filter((bot) => serverIds.has(bot.serverId))
+      .map((bot) => ser.botDTO(bot));
+
     return {
       user: ser.selfUser(user),
       servers,
@@ -304,6 +346,8 @@ function startServer(options = {}) {
       reads,
       presence,
       voice,
+      music,
+      bots,
       streams: streamList(),
       watch: watchList(userId),
       meta: {
@@ -363,6 +407,21 @@ function startServer(options = {}) {
   // ------------------------------------------------------------------
   const presence = new Map(); // userId -> { sockets: Set, status }
 
+  // Push-уведомления (Web Push). Работают, если установлен web-push;
+  // VAPID-ключи создаются автоматически в data/push-keys.json.
+  const push = createPushService({
+    dataDir,
+    db,
+    app,
+    auth,
+    wrap,
+    fail,
+    makeId,
+    nowIso,
+    presence,
+    canAccessChannel,
+  });
+
   function presenceStatus(userId) {
     const live = presence.get(userId);
     if (!live) return 'offline';
@@ -381,25 +440,141 @@ function startServer(options = {}) {
   // ------------------------------------------------------------------
   const voiceChannels = new Map(); // channelId -> Map(userId -> state)
   const voiceBySocket = new Map(); // socketId -> channelId
+  const musicSessions = new Map(); // channelId -> музыкальная сессия бота
+
+  function musicSessionOfBot(botId) {
+    for (const session of musicSessions.values()) {
+      if (session.botId === botId) return session;
+    }
+    return null;
+  }
+
+  function musicSessionDTO(session) {
+    if (!session) return null;
+    const bot = db.bot(session.botId);
+    return musicDTO(session, bot ? ser.botDTO(bot) : null, Date.now());
+  }
+
+  function musicPayload(channelId) {
+    return {
+      channelId,
+      session: musicSessionDTO(musicSessions.get(channelId)),
+      serverNow: Date.now(),
+    };
+  }
+
+  function broadcastMusicState(channelId) {
+    io.to(channelRoom(channelId)).emit('music:state', musicPayload(channelId));
+  }
+
+  // Локальный файл, загруженный для бота, удаляем после остановки трека,
+  // чтобы папка загрузок не разрасталась.
+  function cleanupLocalMusicFile(session) {
+    const filePath = session?.source?.filePath;
+    if (!filePath) return;
+    try {
+      const root = path.resolve(musicDir) + path.sep;
+      const target = path.resolve(filePath);
+      if (target.startsWith(root) && fs.existsSync(target)) fs.unlinkSync(target);
+    } catch {}
+  }
+
+  function stopMusicSession(channelId, reason = 'stopped') {
+    const session = musicSessions.get(channelId);
+    if (!session) return false;
+    musicSessions.delete(channelId);
+    cleanupLocalMusicFile(session);
+    broadcastMusicState(channelId);
+    broadcastVoiceState(channelId);
+    io.to(channelRoom(channelId)).emit('music:ended', {
+      channelId,
+      botId: session.botId,
+      reason,
+    });
+    return true;
+  }
+
+  function startMusicSession({ bot, server, channelId, source, playback, userId, position = 0 }) {
+    const previous = musicSessionOfBot(bot.id);
+    if (previous && previous.channelId !== channelId) {
+      stopMusicSession(previous.channelId, 'moved');
+    }
+    // В канале может играть только один бот.
+    const existing = musicSessions.get(channelId);
+    if (existing && existing.botId !== bot.id) {
+      stopMusicSession(channelId, 'replaced');
+    } else if (existing) {
+      cleanupLocalMusicFile(existing);
+    }
+
+    const session = {
+      id: makeId('music'),
+      botId: bot.id,
+      serverId: server.id,
+      channelId,
+      source,
+      playback,
+      streamKey: playback ? crypto.randomBytes(16).toString('hex') : null,
+      playing: true,
+      position: Math.max(0, Number(position) || 0),
+      updatedAt: Date.now(),
+      startedAt: nowIso(),
+      startedBy: userId,
+      volume: 100,
+    };
+    musicSessions.set(channelId, session);
+    broadcastMusicState(channelId);
+    broadcastVoiceState(channelId);
+    return session;
+  }
+
+  function stopMusicForServer(serverId, reason = 'server') {
+    for (const session of [...musicSessions.values()]) {
+      if (session.serverId === serverId) stopMusicSession(session.channelId, reason);
+    }
+  }
 
   function voiceParticipants(channelId) {
     const map = voiceChannels.get(channelId);
-    if (!map) return [];
     const list = [];
-    for (const [userId, state] of map.entries()) {
-      const user = db.user(userId);
-      if (!user) continue;
+    if (map) {
+      for (const [userId, state] of map.entries()) {
+        const user = db.user(userId);
+        if (!user) continue;
+        list.push({
+          user: ser.publicUser(user),
+          userId,
+          muted: Boolean(state.muted),
+          serverMuted: Boolean(state.serverMuted),
+          deafened: Boolean(state.deafened),
+          camera: Boolean(state.camera),
+          screen: Boolean(state.screen),
+          speaking: Boolean(state.speaking),
+          voiceStreamId: String(state.voiceStreamId || ''),
+          screenAudioStreamId: String(state.screenAudioStreamId || ''),
+          joinedAt: state.joinedAt,
+        });
+      }
+    }
+    // Музыкальный бот — виртуальный участник канала. Реального WebRTC-потока
+    // у него нет: клиенты синхронно проигрывают источник локально.
+    const session = musicSessions.get(channelId);
+    const bot = session ? db.bot(session.botId) : null;
+    if (session && bot) {
       list.push({
-        user: ser.publicUser(user),
-        userId,
-        muted: Boolean(state.muted),
-        deafened: Boolean(state.deafened),
-        camera: Boolean(state.camera),
-        screen: Boolean(state.screen),
-        speaking: Boolean(state.speaking),
-        voiceStreamId: String(state.voiceStreamId || ''),
-        screenAudioStreamId: String(state.screenAudioStreamId || ''),
-        joinedAt: state.joinedAt,
+        user: ser.publicUser(bot),
+        userId: bot.id,
+        bot: true,
+        music: true,
+        muted: false,
+        serverMuted: false,
+        deafened: false,
+        camera: false,
+        screen: false,
+        speaking: Boolean(session.playing),
+        voiceStreamId: '',
+        screenAudioStreamId: '',
+        joinedAt: session.startedAt,
       });
     }
     return list.sort((a, b) => String(a.joinedAt).localeCompare(String(b.joinedAt)));
@@ -662,6 +837,89 @@ function startServer(options = {}) {
     return name;
   }
 
+  // Локальные аудиофайлы для музыкального бота. Файл лежит на сервере,
+  // поэтому его слышат все участники канала, а не только отправитель.
+  const musicUpload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, musicDir),
+      filename: (_req, file, cb) => {
+        const rawExt = path
+          .extname(file.originalname || '')
+          .toLowerCase()
+          .replace(/[^.a-z0-9]/g, '')
+          .slice(0, 10);
+        cb(null, crypto.randomBytes(16).toString('hex') + rawExt);
+      },
+    }),
+    limits: { fileSize: MAX_MUSIC_UPLOAD, files: 1 },
+    fileFilter: (_req, file, cb) => {
+      const ext = path.extname(file.originalname || '').toLowerCase();
+      if (!MUSIC_EXTENSIONS.has(ext) && !String(file.mimetype || '').startsWith('audio/')) {
+        return cb(new Error('Можно загружать только аудиофайлы (MP3, M4A, OGG, WAV, FLAC)'));
+      }
+      cb(null, true);
+    },
+  });
+
+  function acceptMusicUpload(req, res, next) {
+    musicUpload.single('file')(req, res, (error) => {
+      if (!error) return next();
+      if (req.file?.path) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch {}
+      }
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        return fail(res, 'Аудиофайл слишком большой (максимум 100 МБ)', 413);
+      }
+      return fail(res, error.message || 'Не удалось загрузить аудиофайл', 400);
+    });
+  }
+
+  function discardMusicUpload(file) {
+    if (!file?.path) return;
+    try {
+      const root = path.resolve(musicDir) + path.sep;
+      const target = path.resolve(file.path);
+      if (target.startsWith(root) && fs.existsSync(target)) fs.unlinkSync(target);
+    } catch {}
+  }
+
+  function musicTitleFromFilename(name) {
+    const base = path
+      .basename(decodeFilename(name || ''))
+      .replace(/\.[a-z0-9]{2,5}$/i, '')
+      .trim();
+    return (base || 'Локальный файл').slice(0, 200);
+  }
+
+  function probeAudioDuration(filePath) {
+    return new Promise((resolve) => {
+      let ffmpeg = '';
+      try {
+        ffmpeg = require('ffmpeg-static');
+      } catch {
+        return resolve(0);
+      }
+      if (!ffmpeg) return resolve(0);
+      execFile(
+        ffmpeg,
+        ['-hide_banner', '-i', filePath],
+        { timeout: 15000, windowsHide: true, maxBuffer: 2 * 1024 * 1024 },
+        (_error, _stdout, stderr) => {
+          const match = String(stderr || '').match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+          if (!match) return resolve(0);
+          resolve(
+            Math.max(
+              0,
+              Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3])
+            )
+          );
+        }
+      );
+    });
+  }
+
   function parseWaveform(value) {
     if (value === undefined || value === null || value === '') return [];
     try {
@@ -679,6 +937,7 @@ function startServer(options = {}) {
 
   function fileList(files, options = {}) {
     const voice = options.kind === 'voice';
+    const videoNote = options.kind === 'video_note';
     const waveform = voice ? parseWaveform(options.waveform) : [];
     return (files || []).map((file) => {
       const attachment = {
@@ -687,7 +946,10 @@ function startServer(options = {}) {
         size: file.size,
         mime: file.mimetype || 'application/octet-stream',
         url: `/uploads/${file.filename}`,
-        duration: voice ? Math.max(0, Math.round(Number(options.duration) || 0)) : 0,
+        duration:
+          voice || videoNote
+            ? Math.max(0, Math.round(Number(options.duration) || 0))
+            : 0,
         kind: options.kind || null,
       };
       if (voice) attachment.waveform = waveform;
@@ -1235,6 +1497,8 @@ function startServer(options = {}) {
       if (!server) return fail(res, 'Сервер не найден', 404);
       if (server.ownerId !== req.user.id) return fail(res, 'Удалить сервер может только владелец', 403);
       const channelIds = db.data.channels.filter((c) => c.serverId === server.id).map((c) => c.id);
+      stopMusicForServer(server.id, 'server-deleted');
+      db.data.bots = db.data.bots.filter((b) => b.serverId !== server.id);
       db.data.messages = db.data.messages.filter((m) => !channelIds.includes(m.channelId));
       db.data.channels = db.data.channels.filter((c) => c.serverId !== server.id);
       db.data.readStates = db.data.readStates.filter((r) => !channelIds.includes(r.channelId));
@@ -1265,6 +1529,46 @@ function startServer(options = {}) {
       emitUser(target.userId, 'server:removed', { serverId: server.id, reason: 'kick' });
       io.to(serverRoom(server.id)).emit('server:updated', { server: ser.serverDTO(server) });
       res.json({ ok: true });
+    })
+  );
+
+  // Серверный мут: администратор запрещает участнику говорить во всех
+  // голосовых каналах сервера. Состояние хранится в участнике и переживает
+  // переподключение; обычные участники могут только заглушить звук у себя.
+  app.post(
+    '/api/servers/:serverId/members/:userId/voice-mute',
+    auth,
+    wrap((req, res) => {
+      const server = db.server(req.params.serverId);
+      if (!server) return fail(res, 'Сервер не найден', 404);
+      if (!hasPermission(server, req.user.id, 'MUTE_MEMBERS')) {
+        return fail(res, 'Недостаточно прав', 403);
+      }
+      const target = getMember(server, req.params.userId);
+      if (!target) return fail(res, 'Участник не найден', 404);
+      if (target.userId === server.ownerId) return fail(res, 'Нельзя замутить владельца сервера');
+      if (!isHigherOrOwner(server, req.user.id, target.userId)) {
+        return fail(res, 'Недостаточно прав для этого участника', 403);
+      }
+
+      const muted = Boolean(req.body.muted);
+      target.voiceMuted = muted;
+      db.save();
+
+      const channelId = currentVoiceChannel(target.userId);
+      if (channelId) {
+        const state = voiceChannels.get(channelId)?.get(target.userId);
+        if (state) {
+          state.serverMuted = muted;
+          if (muted) state.muted = true;
+          if (muted) state.speaking = false;
+        }
+        emitUser(target.userId, 'voice:force-mute', { muted, serverId: server.id });
+        broadcastVoiceState(channelId);
+      }
+
+      io.to(serverRoom(server.id)).emit('server:updated', { server: ser.serverDTO(server) });
+      res.json({ ok: true, muted });
     })
   );
 
@@ -1515,6 +1819,7 @@ function startServer(options = {}) {
         return fail(res, 'На сервере должен остаться хотя бы один текстовый канал');
       }
       for (const m of db.data.messages.filter((m) => m.channelId === channel.id)) cleanupAttachments(m);
+      stopMusicSession(channel.id, 'channel-deleted');
       db.data.channels = db.data.channels.filter((c) => c.id !== channel.id);
       db.data.messages = db.data.messages.filter((m) => m.channelId !== channel.id);
       db.data.readStates = db.data.readStates.filter((r) => r.channelId !== channel.id);
@@ -1596,8 +1901,9 @@ function startServer(options = {}) {
       }
       const content = String(req.body.content || '').trim().slice(0, MAX_MESSAGE_LENGTH);
       const voice = req.body.voice === '1' || req.body.voice === 'true';
+      const videoNote = req.body.videoNote === '1' || req.body.videoNote === 'true';
       const attachments = fileList(req.files, {
-        kind: voice ? 'voice' : null,
+        kind: videoNote ? 'video_note' : voice ? 'voice' : null,
         duration: req.body.duration,
         waveform: req.body.waveform,
       });
@@ -1623,6 +1929,7 @@ function startServer(options = {}) {
       db.save();
       const dto = ser.messageDTO(message);
       io.to(channelRoom(channel.id)).emit('message:new', { message: dto });
+      push.notifyMessage(dto, channel).catch(() => {});
       res.json({ message: dto });
     })
   );
@@ -1722,6 +2029,7 @@ function startServer(options = {}) {
       db.save();
       const dto = ser.messageDTO(message);
       io.to(channelRoom(target.id)).emit('message:new', { message: dto });
+      push.notifyMessage(dto, target).catch(() => {});
       res.json({ message: dto });
     })
   );
@@ -1990,8 +2298,429 @@ function startServer(options = {}) {
   });
 
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, users: db.data.users.length, messages: db.data.messages.length });
+    const stats = db.stats?.() || {};
+    res.json({
+      ok: true,
+      users: db.data.users.length,
+      messages: db.data.messages.length,
+      storage: stats.storage || 'json',
+    });
   });
+
+  // ICE-конфиг для WebRTC: STUN + TURN с временными credentials.
+  // Endpoint публичный: credentials живут ограниченное время и не раскрывают
+  // секрет coturn. Клиент кеширует ответ и обновляет его до истечения TTL.
+  app.get('/api/ice', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const userId = String(req.query.userId || 'guest').slice(0, 64);
+    res.json(makeIceConfig(userId));
+  });
+
+  // ------------------------------------------------------------------
+  // Музыкальные боты
+  // ------------------------------------------------------------------
+  // Бот — виртуальный участник голосового канала. Сервер хранит общий
+  // источник и позицию, а клиенты синхронно воспроизводят его локально.
+  // Любой участник сервера может включить музыку и управлять воспроизведением.
+  function botMemberContext(req, res) {
+    const bot = db.bot(String(req.params.botId || ''));
+    if (!bot) {
+      fail(res, 'Бот не найден', 404);
+      return null;
+    }
+    const server = db.server(bot.serverId);
+    if (!server) {
+      fail(res, 'Сервер бота не найден', 404);
+      return null;
+    }
+    if (!isMember(server, req.user.id)) {
+      fail(res, 'Вы не участник этого сервера', 403);
+      return null;
+    }
+    return { bot, server };
+  }
+
+  // Удалить бота может его создатель или администратор сервера.
+  function botDeleteContext(req, res) {
+    const context = botMemberContext(req, res);
+    if (!context) return null;
+    const { bot, server } = context;
+    if (bot.ownerId !== req.user.id && !hasPermission(server, req.user.id, 'ADMINISTRATOR')) {
+      fail(res, 'Удалить бота может его создатель или администратор', 403);
+      return null;
+    }
+    return context;
+  }
+
+  function currentVoiceChannel(userId) {
+    for (const [channelId, map] of voiceChannels.entries()) {
+      if (map.has(userId)) return channelId;
+    }
+    return null;
+  }
+
+  function sessionPosition(session) {
+    const base = Math.max(0, Number(session.position) || 0);
+    if (!session.playing) return base;
+    return base + Math.max(0, Date.now() - (Number(session.updatedAt) || Date.now())) / 1000;
+  }
+
+  async function youtubeTitle(videoId) {
+    try {
+      const url = `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&format=json`;
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(4500),
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) return '';
+      const data = await response.json();
+      return String(data.title || '').trim().slice(0, 200);
+    } catch {
+      return '';
+    }
+  }
+
+  app.get(
+    '/api/servers/:serverId/bots',
+    auth,
+    wrap((req, res) => {
+      const server = db.server(req.params.serverId);
+      if (!server || !isMember(server, req.user.id)) return fail(res, 'Сервер не найден', 404);
+      const bots = db.data.bots
+        .filter((bot) => bot.serverId === server.id)
+        .map((bot) => ser.botDTO(bot));
+      res.json({ bots });
+    })
+  );
+
+  app.post(
+    '/api/servers/:serverId/bots',
+    auth,
+    wrap((req, res) => {
+      const server = db.server(req.params.serverId);
+      if (!server || !isMember(server, req.user.id)) return fail(res, 'Сервер не найден', 404);
+      if (db.data.bots.filter((bot) => bot.serverId === server.id).length >= 5) {
+        return fail(res, 'На сервере уже максимум музыкальных ботов (5)');
+      }
+      const displayName = clean(req.body.name, 32) || 'Music Bot';
+      const avatar = req.body.avatar === undefined ? null : validImage(req.body.avatar);
+      if (avatar === undefined) return fail(res, 'Некорректный аватар бота');
+      const accentColor = isHex(req.body.accentColor) ? req.body.accentColor : '#eb459e';
+      const bot = {
+        id: makeId('bot'),
+        serverId: server.id,
+        username: `music_${crypto.randomBytes(3).toString('hex')}`,
+        displayName,
+        avatar,
+        accentColor,
+        bot: true,
+        ownerId: req.user.id,
+        createdAt: nowIso(),
+      };
+      db.data.bots.push(bot);
+      db.save();
+      const dto = ser.botDTO(bot);
+      io.to(serverRoom(server.id)).emit('bot:created', { bot: dto });
+      res.json({ bot: dto });
+    })
+  );
+
+  app.delete(
+    '/api/bots/:botId',
+    auth,
+    wrap((req, res) => {
+      const context = botDeleteContext(req, res);
+      if (!context) return;
+      const { bot, server } = context;
+      for (const session of [...musicSessions.values()]) {
+        if (session.botId === bot.id) stopMusicSession(session.channelId, 'bot-deleted');
+      }
+      db.data.bots = db.data.bots.filter((item) => item.id !== bot.id);
+      db.save();
+      io.to(serverRoom(server.id)).emit('bot:deleted', { botId: bot.id });
+      res.json({ ok: true });
+    })
+  );
+
+  app.post(
+    '/api/bots/:botId/play',
+    auth,
+    wrap(async (req, res) => {
+      const context = botMemberContext(req, res);
+      if (!context) return;
+      const { bot, server } = context;
+      const requestedChannelId = String(req.body.channelId || '').trim();
+      const channelId = requestedChannelId || currentVoiceChannel(req.user.id);
+      if (!channelId) return fail(res, 'Сначала зайдите в голосовой канал');
+      if (currentVoiceChannel(req.user.id) !== channelId) {
+        return fail(res, 'Бот заходит только в ваш текущий голосовой канал');
+      }
+      const channel = db.channel(channelId);
+      if (!channel || channel.type !== 'voice' || channel.serverId !== server.id) {
+        return fail(res, 'Голосовой канал не найден', 404);
+      }
+
+      const source = parseMusicSource(req.body.source || req.body);
+      if (!source) return fail(res, 'Укажите корректную ссылку на музыку, клип или радио');
+
+      let playback = null;
+      if (source.type === 'youtube') {
+        try {
+          const resolved = await resolveYouTube(source.videoId);
+          source.title = resolved.title || source.title;
+          source.duration = resolved.duration || 0;
+          playback = { streamUrl: resolved.streamUrl, expiresAt: resolved.expiresAt };
+        } catch (error) {
+          // Если YouTube не отдал прямой поток, клиент попробует IFrame-плеер.
+          console.warn('[music] YouTube stream:', error.message);
+          if (!req.body.title) {
+            const title = await youtubeTitle(source.videoId);
+            if (title) source.title = title;
+          }
+        }
+      } else if (source.type === 'rutube') {
+        try {
+          const resolved = await resolveRutube(source.videoId);
+          source.title = resolved.title || source.title;
+          source.duration = resolved.duration || 0;
+          source.live = resolved.live;
+          playback = { hlsUpstream: resolved.hlsUrl };
+        } catch (error) {
+          return fail(res, `Не удалось открыть Rutube: ${error.message}`);
+        }
+      }
+
+      const session = startMusicSession({
+        bot,
+        server,
+        channelId,
+        source,
+        playback,
+        userId: req.user.id,
+        position: req.body.position,
+      });
+      res.json({ session: musicSessionDTO(session) });
+    })
+  );
+
+  // Загрузка локального аудиофайла: файл сохраняется на сервере и играет
+  // у всех участников канала через обычный <audio>.
+  app.post(
+    '/api/bots/:botId/play-file',
+    auth,
+    acceptMusicUpload,
+    wrap(async (req, res) => {
+      const context = botMemberContext(req, res);
+      if (!context) {
+        discardMusicUpload(req.file);
+        return;
+      }
+      const { bot, server } = context;
+      const file = req.file;
+      if (!file) return fail(res, 'Выберите аудиофайл', 400);
+
+      const requestedChannelId = String(req.body.channelId || '').trim();
+      const channelId = requestedChannelId || currentVoiceChannel(req.user.id);
+      if (!channelId || currentVoiceChannel(req.user.id) !== channelId) {
+        discardMusicUpload(file);
+        return fail(res, 'Бот заходит только в ваш текущий голосовой канал');
+      }
+      const channel = db.channel(channelId);
+      if (!channel || channel.type !== 'voice' || channel.serverId !== server.id) {
+        discardMusicUpload(file);
+        return fail(res, 'Голосовой канал не найден', 404);
+      }
+
+      try {
+        const source = {
+          type: 'file',
+          url: `/uploads/music/${file.filename}`,
+          title: musicTitleFromFilename(file.originalname),
+          duration: await probeAudioDuration(file.path),
+          live: false,
+          mime: file.mimetype || 'audio/mpeg',
+          size: file.size,
+          filePath: file.path,
+        };
+        const session = startMusicSession({
+          bot,
+          server,
+          channelId,
+          source,
+          playback: null,
+          userId: req.user.id,
+          position: req.body.position,
+        });
+        res.json({ session: musicSessionDTO(session) });
+      } catch (error) {
+        discardMusicUpload(file);
+        throw error;
+      }
+    })
+  );
+
+  // Прокси аудиопотока YouTube: клиент получает один и тот же URL для всех участников,
+  // а сервер сам обновляет временную ссылку googlevideo при истечении.
+  app.get(
+    '/api/music/stream/:botId',
+    wrap(async (req, res) => {
+      const session = musicSessionOfBot(req.params.botId);
+      if (!session || !session.streamKey || String(req.query.key || '') !== session.streamKey) {
+        return fail(res, 'Поток недоступен', 403);
+      }
+      if (session.source?.type !== 'youtube') return fail(res, 'Это не YouTube-поток', 404);
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const stale =
+          !session.playback?.streamUrl || session.playback.expiresAt <= Date.now() + 60_000;
+        if (stale) {
+          try {
+            const resolved = await resolveYouTube(session.source.videoId, { force: attempt > 0 });
+            session.playback = {
+              streamUrl: resolved.streamUrl,
+              expiresAt: resolved.expiresAt,
+            };
+          } catch (error) {
+            return fail(res, `YouTube не отдал аудиопоток: ${error.message}`, 502);
+          }
+        }
+        const upstream = await fetchUpstream(req, session.playback.streamUrl);
+        if ([401, 403, 410].includes(upstream.status) && attempt === 0) {
+          try {
+            await upstream.body?.cancel();
+          } catch {}
+          session.playback = null;
+          continue;
+        }
+        if (!upstream.ok && upstream.status !== 206) {
+          try {
+            await upstream.body?.cancel();
+          } catch {}
+          return fail(res, 'YouTube не отдал аудиопоток', 502);
+        }
+        pipeResponse(res, upstream);
+        return;
+      }
+      return fail(res, 'YouTube не отдал аудиопоток', 502);
+    })
+  );
+
+  // Прокси HLS Rutube. Плейлисты переписываются на этот же адрес, поэтому
+  // hls.js не упирается в отсутствие CORS у CDN Rutube.
+  app.get(
+    '/api/music/hls/:botId',
+    wrap(async (req, res) => {
+      const session = musicSessionOfBot(req.params.botId);
+      if (!session || !session.streamKey || String(req.query.key || '') !== session.streamKey) {
+        return fail(res, 'Поток недоступен', 403);
+      }
+      if (session.source?.type !== 'rutube' || !session.playback?.hlsUpstream) {
+        return fail(res, 'Это не Rutube-поток', 404);
+      }
+
+      const target = String(req.query.u || session.playback.hlsUpstream).slice(0, 4096);
+      if (!isAllowedUpstream(target)) return fail(res, 'Недопустимый адрес потока', 403);
+
+      const playlistUrl = isPlaylist(target, '');
+      const upstream = await fetchUpstream(req, target, { range: !playlistUrl });
+      if (!upstream.ok && upstream.status !== 206) {
+        try {
+          await upstream.body?.cancel();
+        } catch {}
+        return fail(res, 'Rutube не отдал поток', 502);
+      }
+
+      const contentType = upstream.headers.get('content-type') || '';
+      if (isPlaylist(target, contentType)) {
+        const text = await upstream.text();
+        const proxyUrl = (absolute) =>
+          `/api/music/hls/${session.botId}?key=${session.streamKey}&u=${encodeURIComponent(absolute)}`;
+        res.setHeader('content-type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('cache-control', 'no-store');
+        res.setHeader('access-control-allow-origin', '*');
+        res.send(rewritePlaylist(text, upstream.url || target, proxyUrl));
+        return;
+      }
+
+      pipeResponse(res, upstream);
+    })
+  );
+
+  app.post(
+    '/api/bots/:botId/pause',
+    auth,
+    wrap((req, res) => {
+      const context = botMemberContext(req, res);
+      if (!context) return;
+      const session = musicSessionOfBot(context.bot.id);
+      if (!session) return fail(res, 'Бот сейчас ничего не играет', 404);
+      session.position = sessionPosition(session);
+      session.playing = false;
+      session.updatedAt = Date.now();
+      broadcastMusicState(session.channelId);
+      broadcastVoiceState(session.channelId);
+      res.json({ session: musicSessionDTO(session) });
+    })
+  );
+
+  app.post(
+    '/api/bots/:botId/resume',
+    auth,
+    wrap((req, res) => {
+      const context = botMemberContext(req, res);
+      if (!context) return;
+      const session = musicSessionOfBot(context.bot.id);
+      if (!session) return fail(res, 'Бот сейчас ничего не играет', 404);
+      session.playing = true;
+      session.updatedAt = Date.now();
+      broadcastMusicState(session.channelId);
+      broadcastVoiceState(session.channelId);
+      res.json({ session: musicSessionDTO(session) });
+    })
+  );
+
+  app.post(
+    '/api/bots/:botId/seek',
+    auth,
+    wrap((req, res) => {
+      const context = botMemberContext(req, res);
+      if (!context) return;
+      const session = musicSessionOfBot(context.bot.id);
+      if (!session) return fail(res, 'Бот сейчас ничего не играет', 404);
+      const requested = Math.max(0, Number(req.body.position) || 0);
+      const limit = Math.max(0, Number(session.source?.duration) || 0);
+      session.position = limit ? Math.min(requested, limit) : requested;
+      session.updatedAt = Date.now();
+      broadcastMusicState(session.channelId);
+      res.json({ session: musicSessionDTO(session) });
+    })
+  );
+
+  app.post(
+    '/api/bots/:botId/stop',
+    auth,
+    wrap((req, res) => {
+      const context = botMemberContext(req, res);
+      if (!context) return;
+      const session = musicSessionOfBot(context.bot.id);
+      if (!session) return fail(res, 'Бот сейчас ничего не играет', 404);
+      stopMusicSession(session.channelId, 'stopped');
+      res.json({ ok: true });
+    })
+  );
+
+  app.post(
+    '/api/bots/:botId/leave',
+    auth,
+    wrap((req, res) => {
+      const context = botMemberContext(req, res);
+      if (!context) return;
+      const session = musicSessionOfBot(context.bot.id);
+      if (!session) return res.json({ ok: true });
+      stopMusicSession(session.channelId, 'left');
+      res.json({ ok: true });
+    })
+  );
 
   // Клиенты (desktop, portable, Android) сверяют свою версию с сервером.
   app.get('/api/version', (_req, res) => {
@@ -2070,6 +2799,9 @@ function startServer(options = {}) {
       }
       broadcastVoiceState(channelId);
       const channel = db.channel(channelId);
+      if (!voiceChannels.get(channelId)?.size) {
+        stopMusicSession(channelId, 'empty');
+      }
       if (channel?.type === 'dm' && !voiceChannels.get(channelId)?.size) {
         io.to(channelRoom(channelId)).emit('call:ended', { channelId, reason });
       }
@@ -2079,6 +2811,7 @@ function startServer(options = {}) {
       try {
         const channel = db.channel(String(payload.channelId || ''));
         if (!channel) throw new Error('Канал не найден');
+        let memberRecord = null;
         if (channel.type === 'dm') {
           if (!(channel.memberIds || []).includes(userId)) throw new Error('Нет доступа к звонку');
         } else {
@@ -2086,12 +2819,15 @@ function startServer(options = {}) {
           if (!server || !isMember(server, userId)) throw new Error('Нет доступа к каналу');
           if (channel.type !== 'voice') throw new Error('Это не голосовой канал');
           if (!hasPermission(server, userId, 'CONNECT')) throw new Error('Нет права подключаться к голосу');
+          memberRecord = getMember(server, userId);
         }
         if (voiceBySocket.has(socket.id)) leaveVoice('switch');
         const map = voiceChannels.get(channel.id) || new Map();
+        const serverMuted = Boolean(memberRecord?.voiceMuted);
         const state = {
           socketId: socket.id,
-          muted: Boolean(payload.muted),
+          muted: serverMuted ? true : Boolean(payload.muted),
+          serverMuted,
           deafened: Boolean(payload.deafened),
           camera: false,
           screen: false,
@@ -2105,6 +2841,7 @@ function startServer(options = {}) {
         voiceBySocket.set(socket.id, channel.id);
         socket.join(voiceRoom(channel.id));
         broadcastVoiceState(channel.id);
+        socket.emit('music:state', musicPayload(channel.id));
         const participants = voiceParticipants(channel.id).filter((p) => p.userId !== userId);
         if (typeof ack === 'function') {
           ack({
@@ -2113,6 +2850,7 @@ function startServer(options = {}) {
             self: {
               userId,
               muted: state.muted,
+              serverMuted: state.serverMuted,
               deafened: state.deafened,
               camera: false,
               screen: false,
@@ -2120,7 +2858,9 @@ function startServer(options = {}) {
             participants: participants.map((p) => ({
               userId: p.userId,
               user: p.user,
+              bot: Boolean(p.bot),
               muted: p.muted,
+              serverMuted: p.serverMuted,
               deafened: p.deafened,
               camera: p.camera,
               screen: p.screen,
@@ -2142,7 +2882,9 @@ function startServer(options = {}) {
       const map = voiceChannels.get(channelId);
       const state = map?.get(userId);
       if (!state || state.socketId !== socket.id) return;
-      if (payload.muted !== undefined) state.muted = Boolean(payload.muted);
+      if (payload.muted !== undefined) {
+        state.muted = state.serverMuted ? true : Boolean(payload.muted);
+      }
       if (payload.deafened !== undefined) state.deafened = Boolean(payload.deafened);
       if (payload.camera !== undefined) state.camera = Boolean(payload.camera);
       if (payload.screen !== undefined) state.screen = Boolean(payload.screen);
@@ -2206,6 +2948,9 @@ function startServer(options = {}) {
           from: ser.publicUser(db.user(userId)),
           channel: ser.dmDTO(channel),
         });
+        push
+          .notifyIncomingCall(memberId, ser.publicUser(db.user(userId)), channel)
+          .catch(() => {});
       }
     });
 

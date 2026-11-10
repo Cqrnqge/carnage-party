@@ -19,6 +19,9 @@ export const DEFAULT_SETTINGS = {
   outputVolume: 100,
   streamVolume: 100,
   streamMuted: false,
+  musicVolume: 70,
+  musicMuted: false,
+  mutedUsers: [],
   reduceMotion: false,
   pushToTalk: false,
   pttKey: 'KeyV',
@@ -50,6 +53,7 @@ const initialVoice = {
   connecting: false,
   stageOpen: false,
   muted: false,
+  serverMuted: false,
   deafened: false,
   camera: false,
   screen: false,
@@ -104,6 +108,9 @@ export const useApp = create((set, get) => ({
   streams: [],
   myStream: null,
   watchRooms: [],
+
+  bots: [],
+  music: {},
 
   modal: null,
   screenPicker: null,
@@ -175,6 +182,10 @@ export const useApp = create((set, get) => ({
       streams,
       myStream,
       watchRooms,
+      bots: Array.isArray(payload.bots) ? payload.bots : state.bots,
+      music: payload.music && typeof payload.music === 'object'
+        ? (merge ? { ...state.music, ...payload.music } : { ...payload.music })
+        : (merge ? state.music : {}),
       active,
       ready: true,
     });
@@ -207,6 +218,8 @@ export const useApp = create((set, get) => ({
       streams: [],
       myStream: null,
       watchRooms: [],
+      bots: [],
+      music: {},
       modal: null,
       toasts: [],
       replyTo: null,
@@ -237,6 +250,41 @@ export const useApp = create((set, get) => ({
     const list = (get().watchRooms || []).filter((item) => item.id !== id);
     if (room) list.push(room);
     set({ watchRooms: list });
+  },
+
+  // ------------------------------------------------------------------
+  // Музыкальные боты
+  // ------------------------------------------------------------------
+  setBots: (bots) => set({ bots: Array.isArray(bots) ? bots : [] }),
+
+  addBot: (bot) => {
+    if (!bot?.id) return;
+    const bots = get().bots.filter((item) => item.id !== bot.id);
+    bots.push(bot);
+    set({ bots });
+  },
+
+  removeBot: (botId) => {
+    const music = { ...get().music };
+    let changed = false;
+    for (const [channelId, session] of Object.entries(music)) {
+      if (session?.botId === botId) {
+        delete music[channelId];
+        changed = true;
+      }
+    }
+    set({
+      bots: get().bots.filter((item) => item.id !== botId),
+      ...(changed ? { music } : {}),
+    });
+  },
+
+  applyMusicState: ({ channelId, session }) => {
+    if (!channelId) return;
+    const music = { ...get().music };
+    if (session) music[channelId] = session;
+    else delete music[channelId];
+    set({ music });
   },
 
   // ------------------------------------------------------------------

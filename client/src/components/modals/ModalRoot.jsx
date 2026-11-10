@@ -19,6 +19,7 @@ import ForwardModal from './ForwardModal';
 import StartStreamModal from './StartStreamModal';
 import WatchPartySetupModal from '../watch/WatchPartySetupModal';
 import WatchPartyView from '../watch/WatchPartyView';
+import MusicBotModal from './MusicBotModal';
 
 export default function ModalRoot() {
   const modal = useApp((state) => state.modal);
@@ -64,6 +65,8 @@ export default function ModalRoot() {
       return <WatchPartySetupModal {...props} />;
     case 'watchParty':
       return <WatchPartyView {...props} />;
+    case 'musicBot':
+      return <MusicBotModal {...props} />;
     default:
       return null;
   }

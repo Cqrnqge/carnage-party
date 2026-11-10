@@ -1,5 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import { Ban, Crown, MessageSquare, MoreVertical, Shield, UserMinus, UserCog, X } from 'lucide-react';
+import {
+  Ban,
+  Crown,
+  MessageSquare,
+  MicOff,
+  MoreVertical,
+  Shield,
+  UserMinus,
+  UserCog,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-react';
 import { api } from '../../api';
 import { useApp } from '../../store';
 import { hasPermission, roleColor, sortedRoles } from '../../constants';
@@ -10,6 +22,7 @@ import ContextMenu from '../ui/ContextMenu';
 function MemberRow({ member, server, onMenu, onRoles }) {
   const presence = useApp((state) => state.presence[member.id]);
   const openModal = useApp((state) => state.openModal);
+  const locallyMuted = useApp((state) => (state.settings.mutedUsers || []).includes(member.id));
   const status = presence || member.status || 'offline';
   const color = roleColor(server, member.id);
   const topRole = sortedRoles(server).find((role) => (member.roleIds || []).includes(role.id));
@@ -28,6 +41,8 @@ function MemberRow({ member, server, onMenu, onRoles }) {
         <span className="member-name" style={color ? { color } : undefined}>
           {member.nickname || member.displayName}
           {server.ownerId === member.id ? <Crown size={12} className="member-crown" title="Владелец" /> : null}
+          {member.voiceMuted ? <MicOff size={12} className="member-mute-icon" title="Заглушён администратором" /> : null}
+          {locallyMuted ? <VolumeX size={12} className="member-mute-icon" title="Заглушён для вас" /> : null}
         </span>
         {member.customStatus ? <span className="member-status">{member.customStatus}</span> : null}
         {!member.customStatus && topRole && topRole.name !== '@everyone' ? (
@@ -67,11 +82,15 @@ export default function MemberList({ server, channel, onClose }) {
   const openModal = useApp((state) => state.openModal);
   const setActive = useApp((state) => state.setActive);
   const toast = useApp((state) => state.toast);
+  const settings = useApp((state) => state.settings);
+  const updateSettings = useApp((state) => state.updateSettings);
   const [menu, setMenu] = useState(null);
 
   const canManageRoles = hasPermission(server, me?.id, 'MANAGE_ROLES');
   const canKick = hasPermission(server, me?.id, 'KICK_MEMBERS');
   const canBan = hasPermission(server, me?.id, 'BAN_MEMBERS');
+  const canMute = hasPermission(server, me?.id, 'MUTE_MEMBERS');
+  const mutedUsers = settings.mutedUsers || [];
 
   const groups = useMemo(() => {
     const members = [...(server.members || [])];
@@ -127,6 +146,28 @@ export default function MemberList({ server, channel, onClose }) {
     }
   };
 
+  const toggleLocalMute = (member) => {
+    const next = mutedUsers.includes(member.id)
+      ? mutedUsers.filter((id) => id !== member.id)
+      : [...mutedUsers, member.id];
+    updateSettings({ mutedUsers: next });
+  };
+
+  const toggleVoiceMute = async (member) => {
+    try {
+      await api(`/api/servers/${server.id}/members/${member.id}/voice-mute`, {
+        method: 'POST',
+        body: { muted: !member.voiceMuted },
+      });
+      toast(
+        member.voiceMuted ? 'Участнику разрешено говорить' : 'Участник заглушён в голосе',
+        'success'
+      );
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
   const menuItems = menu
     ? [
         {
@@ -146,6 +187,22 @@ export default function MemberList({ server, channel, onClose }) {
               label: 'Назначить роли',
               icon: <Shield size={16} />,
               onClick: () => openRoles(menu.member),
+            }
+          : null,
+        canMute && menu.member.id !== me?.id && menu.member.id !== server.ownerId
+          ? {
+              label: menu.member.voiceMuted ? 'Разрешить говорить' : 'Заглушить в голосе',
+              icon: menu.member.voiceMuted ? <Volume2 size={16} /> : <MicOff size={16} />,
+              onClick: () => toggleVoiceMute(menu.member),
+            }
+          : null,
+        menu.member.id !== me?.id
+          ? {
+              label: mutedUsers.includes(menu.member.id)
+                ? 'Включить звук для себя'
+                : 'Заглушить для себя',
+              icon: mutedUsers.includes(menu.member.id) ? <Volume2 size={16} /> : <VolumeX size={16} />,
+              onClick: () => toggleLocalMute(menu.member),
             }
           : null,
         canKick && menu.member.id !== me?.id && menu.member.id !== server.ownerId

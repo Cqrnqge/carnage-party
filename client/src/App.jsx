@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Loader2, RefreshCw, Server, WifiOff } from 'lucide-react';
-import { api, clearToken } from './api';
+import { api, clearToken, serverUrl } from './api';
 import { useApp, selectChannel } from './store';
 import { connectSocket, disconnectSocket } from './socket';
 import { voiceManager } from './voice';
@@ -19,6 +19,7 @@ import Toasts from './components/ui/Toasts';
 import { BrandMark } from './components/ui/Avatar';
 import VoiceDock from './components/layout/VoiceDock';
 import MobileTabBar from './components/mobile/MobileTabBar';
+import MusicPlayer from './components/music/MusicPlayer';
 import { isAndroidApp, openNativeServerSettings, useMobileClient } from './mobile';
 import ScreenPicker from './components/voice/ScreenPicker';
 import PushToTalk from './components/voice/PushToTalk';
@@ -133,6 +134,42 @@ export default function App() {
       disconnectSocket();
     };
   }, []);
+
+  // Service worker для push и переход по клику на уведомление.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return undefined;
+    if (!window.isSecureContext) return undefined;
+    navigator.serviceWorker.register(serverUrl('/sw.js')).catch(() => {});
+    const onMessage = (event) => {
+      if (event.data?.type !== 'carnage:notification-click') return;
+      const channelId = String(event.data.data?.channelId || '');
+      if (!channelId) return;
+      const state = useApp.getState();
+      const channel = selectChannel({ channels: state.channels, dms: state.dms }, channelId);
+      if (channel) state.setActive({ type: 'channel', id: channelId });
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, []);
+
+  // Переход по ссылке из push: /?channel=<id>.
+  useEffect(() => {
+    if (!ready) return;
+    let channelId = '';
+    try {
+      channelId = new URLSearchParams(window.location.search).get('channel') || '';
+    } catch {}
+    if (!channelId) return;
+    const state = useApp.getState();
+    const channel = selectChannel({ channels: state.channels, dms: state.dms }, channelId);
+    if (channel) state.setActive({ type: 'channel', id: channelId });
+    try {
+      const params = new URLSearchParams(window.location.search);
+      params.delete('channel');
+      const search = params.toString();
+      window.history.replaceState({}, '', `${window.location.pathname}${search ? `?${search}` : ''}${window.location.hash}`);
+    } catch {}
+  }, [ready]);
 
   // Android-кнопка «Назад» сначала закрывает меню или окно, а не приложение.
   useEffect(() => {
@@ -311,6 +348,7 @@ export default function App() {
 
       <ScreenPicker />
       <IncomingCallModal />
+      <MusicPlayer />
       <ModalRoot />
       <Toasts />
     </div>

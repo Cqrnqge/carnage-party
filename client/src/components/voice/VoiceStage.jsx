@@ -11,6 +11,7 @@ import {
   Minimize2,
   Monitor,
   MonitorOff,
+  Music2,
   PhoneOff,
   Radio,
   ScreenShare,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useApp, selectChannel } from '../../store';
 import { cx, keyLabel } from '../../utils';
+import { hasPermission } from '../../constants';
 import Avatar from '../ui/Avatar';
 import ContextMenu from '../ui/ContextMenu';
 import { voiceManager } from '../../voice';
@@ -133,9 +135,11 @@ function ParticipantTile({ participant, stream, isSelf, localStream, compact, on
       <div className="voice-tile-name">
         <span>{participant.user?.displayName || 'Участник'}{isSelf ? ' (вы)' : ''}</span>
         <div className="voice-tile-badges">
+          {participant.serverMuted ? <span className="voice-badge server-muted" title="Заглушён администратором"><MicOff size={12} /></span> : null}
           {participant.muted ? <span className="voice-badge muted"><MicOff size={12} /></span> : null}
           {participant.deafened ? <span className="voice-badge"><VolumeX size={12} /></span> : null}
           {participant.screen ? <span className="voice-badge screen"><Monitor size={12} /></span> : null}
+          {participant.bot || participant.user?.bot ? <span className="voice-badge bot"><Music2 size={12} /></span> : null}
         </div>
       </div>
       {camera ? (
@@ -154,9 +158,12 @@ export default function VoiceStage() {
   const settings = useApp((state) => state.settings);
   const setVoice = useApp((state) => state.setVoice);
   const openModal = useApp((state) => state.openModal);
+  const toast = useApp((state) => state.toast);
   const channels = useApp((state) => state.channels);
   const dms = useApp((state) => state.dms);
   const streams = useApp((state) => state.streams);
+  const servers = useApp((state) => state.servers);
+  const music = useApp((state) => state.music);
   const [fullscreen, setFullscreen] = useState(false);
   const [streamFullscreen, setStreamFullscreen] = useState(null);
   const [demoMenu, setDemoMenu] = useState(null);
@@ -167,6 +174,15 @@ export default function VoiceStage() {
   const channelName = channel && channel.type !== 'dm' ? channel.name : '';
   const channelStreams = (streams || []).filter(
     (stream) => stream.live !== false && stream.channelId === voice.channelId
+  );
+  const voiceServer = channel?.serverId ? (servers || []).find((item) => item.id === channel.serverId) : null;
+  const musicSession = voice.channelId ? music[voice.channelId] : null;
+  // Музыку может включить и поставить на паузу любой участник канала.
+  const canManageMusic = Boolean(
+    channel?.type === 'voice' &&
+      voiceServer &&
+      user &&
+      hasPermission(voiceServer, user.id, 'CONNECT')
   );
 
   useEffect(() => {
@@ -185,6 +201,7 @@ export default function VoiceStage() {
         userId: user.id,
         user,
         muted: voice.muted,
+        serverMuted: voice.serverMuted,
         deafened: voice.deafened,
         camera: voice.camera,
         screen: voice.screen,
@@ -212,6 +229,7 @@ export default function VoiceStage() {
     voice.connecting,
     voice.participants,
     voice.muted,
+    voice.serverMuted,
     voice.deafened,
     voice.camera,
     voice.screen,
@@ -416,6 +434,22 @@ export default function VoiceStage() {
             <span>Стрим</span>
             {channelStreams.length ? <span className="voice-control-live" /> : null}
           </button>
+          {canManageMusic ? (
+            <button
+              className={cx('voice-control', 'music', musicSession && 'live')}
+              onClick={() =>
+                openModal('musicBot', {
+                  channelId: voice.channelId,
+                  serverId: voiceServer.id,
+                })
+              }
+              title="Музыкальный бот — включить трек или радио в этом канале"
+            >
+              <Music2 size={22} />
+              <span>Музыка</span>
+              {musicSession ? <span className="voice-control-live" /> : null}
+            </button>
+          ) : null}
           <button
             className="voice-control watch"
             onClick={() =>
@@ -424,7 +458,7 @@ export default function VoiceStage() {
                 channelName,
               })
             }
-            title="Watch Party — смотреть видео вместе"
+            title="Watch Party - смотреть видео вместе"
           >
             <Tv size={22} />
             <span>Watch Party</span>
